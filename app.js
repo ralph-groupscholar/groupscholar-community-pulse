@@ -1,336 +1,261 @@
-const STORAGE_KEY = "groupscholar-community-pulse";
+const storageKey = "gscpulse-signals";
 
-const seedData = {
-  signals: [
-    {
-      id: crypto.randomUUID(),
-      title: "Scholar cohort reporting housing stress",
-      theme: "Basic needs",
-      segment: "First-year scholars",
-      urgency: "High",
-      owner: "Community Lead",
-      followup: "Coordinate emergency aid clinic and partner referrals.",
-      timestamp: new Date().toISOString(),
-    },
-    {
-      id: crypto.randomUUID(),
-      title: "Mentor engagement dipping post midterms",
-      theme: "Mentor program",
-      segment: "Mentors",
-      urgency: "Medium",
-      owner: "Mentor Ops",
-      followup: "Offer midterm reset and appreciation touchpoints.",
-      timestamp: new Date().toISOString(),
-    },
-  ],
-  posts: [
-    {
-      id: crypto.randomUUID(),
-      name: "Campus advisors",
-      frequency: "Weekly",
-      trust: 4,
-      pulse: "Staffing gaps slowing referrals.",
-    },
-    {
-      id: crypto.randomUUID(),
-      name: "Alumni ambassadors",
-      frequency: "Biweekly",
-      trust: 5,
-      pulse: "Strong advocacy, need updated talking points.",
-    },
-  ],
-  checkins: [
-    {
-      id: crypto.randomUUID(),
-      moment: "January cohort standup",
-      score: 7,
-      notes: "Excitement around internships; stress on transportation costs.",
-    },
-  ],
-  actions: [
-    {
-      id: crypto.randomUUID(),
-      action: "Launch emergency aid clinic",
-      owner: "Scholar Success",
-      due: new Date().toISOString().slice(0, 10),
-      status: "In Progress",
-    },
-  ],
-  notes: "",
-};
+const formatNumber = (value, digits = 2) => Number(value).toFixed(digits);
+const today = () => new Date().toISOString().slice(0, 10);
 
-const state = loadState();
-
-const snapshotEl = document.getElementById("snapshot");
-const postListEl = document.getElementById("post-list");
-const checkinListEl = document.getElementById("checkin-list");
-const signalListEl = document.getElementById("signal-list");
-const actionListEl = document.getElementById("action-list");
-const notesEl = document.getElementById("notes");
-
-const dialogMap = {
-  signal: document.getElementById("signal-dialog"),
-  post: document.getElementById("post-dialog"),
-  checkin: document.getElementById("checkin-dialog"),
-  action: document.getElementById("action-dialog"),
-};
-
-const forms = {
-  signal: document.getElementById("signal-form"),
-  post: document.getElementById("post-form"),
-  checkin: document.getElementById("checkin-form"),
-  action: document.getElementById("action-form"),
-};
-
-function loadState() {
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if (!raw) {
-    return structuredClone(seedData);
-  }
+const loadSignals = () => {
+  const stored = localStorage.getItem(storageKey);
+  if (!stored) return [];
   try {
-    const parsed = JSON.parse(raw);
-    return {
-      signals: parsed.signals ?? [],
-      posts: parsed.posts ?? [],
-      checkins: parsed.checkins ?? [],
-      actions: parsed.actions ?? [],
-      notes: parsed.notes ?? "",
-    };
+    const parsed = JSON.parse(stored);
+    return Array.isArray(parsed) ? parsed : [];
   } catch (error) {
-    console.warn("Failed to parse state", error);
-    return structuredClone(seedData);
+    console.warn("Failed to parse stored signals", error);
+    return [];
   }
-}
+};
 
-function saveState() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-}
+const saveSignals = (signals) => {
+  localStorage.setItem(storageKey, JSON.stringify(signals));
+};
 
-function renderSnapshot() {
-  const highUrgency = state.signals.filter((signal) => signal.urgency === "High").length;
-  const avgScore = state.checkins.length
-    ? Math.round(
-        (state.checkins.reduce((sum, checkin) => sum + Number(checkin.score || 0), 0) /
-          state.checkins.length) * 10
-      ) / 10
+const state = {
+  signals: loadSignals(),
+};
+
+const elements = {
+  list: document.getElementById("signal-list"),
+  search: document.getElementById("search"),
+  filterTheme: document.getElementById("filter-theme"),
+  filterUrgency: document.getElementById("filter-urgency"),
+  form: document.getElementById("signal-form"),
+  seed: document.getElementById("seed-data"),
+  export: document.getElementById("export-json"),
+  reset: document.getElementById("reset-data"),
+  metrics: {
+    total: document.getElementById("metric-total"),
+    sentiment: document.getElementById("metric-sentiment"),
+    urgent: document.getElementById("metric-urgent"),
+    due: document.getElementById("metric-due"),
+  },
+  insights: {
+    drift: document.getElementById("insight-drift"),
+    theme: document.getElementById("insight-theme"),
+    source: document.getElementById("insight-source"),
+    themeMix: document.getElementById("theme-mix"),
+    urgencyMix: document.getElementById("urgency-mix"),
+  },
+  queue: document.getElementById("action-queue"),
+};
+
+const uniqueValues = (signals, key) =>
+  [...new Set(signals.map((signal) => signal[key]))].sort();
+
+const sentimentLabel = (value) => {
+  if (value >= 1) return "Positive";
+  if (value <= -1) return "Needs attention";
+  return "Neutral";
+};
+
+const deriveMetrics = (signals) => {
+  const total = signals.length;
+  const avgSentiment = total
+    ? signals.reduce((sum, signal) => sum + Number(signal.sentiment || 0), 0) / total
     : 0;
-  const openActions = state.actions.filter((action) => action.status !== "Done").length;
+  const urgent = signals.filter((signal) => signal.urgency === "high").length;
+  const due = signals.filter((signal) => signal.response_due).length;
+  return { total, avgSentiment, urgent, due };
+};
 
-  const cards = [
-    { label: "Signals logged", value: state.signals.length },
-    { label: "High urgency", value: highUrgency },
-    { label: "Avg sentiment", value: avgScore || "-" },
-    { label: "Open actions", value: openActions },
-  ];
+const getDominant = (signals, key) => {
+  if (!signals.length) return "—";
+  const counts = signals.reduce((acc, signal) => {
+    const value = signal[key];
+    acc[value] = (acc[value] || 0) + 1;
+    return acc;
+  }, {});
+  return Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0];
+};
 
-  snapshotEl.innerHTML = cards
-    .map(
-      (card) => `
-        <div class="snapshot">
-          <span>${card.label}</span>
-          <strong>${card.value}</strong>
-        </div>
-      `
-    )
-    .join("");
-}
-
-function renderPosts() {
-  postListEl.innerHTML = state.posts
-    .map(
-      (post) => `
-      <div class="card">
-        <strong>${post.name}</strong>
-        <div class="tag-row">
-          <span class="tag">${post.frequency}</span>
-          <span class="tag soft">Trust ${post.trust}/5</span>
-        </div>
-        <p>${post.pulse}</p>
-      </div>
-    `
-    )
-    .join("");
-}
-
-function renderCheckins() {
-  checkinListEl.innerHTML = state.checkins
-    .map(
-      (checkin) => `
-      <div class="card">
-        <strong>${checkin.moment}</strong>
-        <div class="tag-row">
-          <span class="tag">Score ${checkin.score}/10</span>
-        </div>
-        <p>${checkin.notes || "No notes yet."}</p>
-      </div>
-    `
-    )
-    .join("");
-}
-
-let filterHighOnly = false;
-
-function renderSignals() {
-  const signals = filterHighOnly
-    ? state.signals.filter((signal) => signal.urgency === "High")
-    : state.signals;
-
-  signalListEl.innerHTML = signals
-    .map(
-      (signal) => `
-      <div class="card signal">
-        <strong>${signal.title}</strong>
-        <div class="tag-row">
-          <span class="tag">${signal.theme}</span>
-          <span class="tag soft">${signal.segment}</span>
-          <span class="tag warn">${signal.urgency}</span>
-        </div>
-        <p><strong>Owner:</strong> ${signal.owner}</p>
-        <p>${signal.followup || "No follow-up captured yet."}</p>
-      </div>
-    `
-    )
-    .join("");
-}
-
-function renderActions() {
-  actionListEl.innerHTML = state.actions
-    .map(
-      (action) => `
-      <div class="card">
-        <strong>${action.action}</strong>
-        <div class="tag-row">
-          <span class="tag">${action.owner}</span>
-          <span class="tag soft">Due ${action.due}</span>
-          <span class="tag warn">${action.status}</span>
-        </div>
-      </div>
-    `
-    )
-    .join("");
-}
-
-function renderNotes() {
-  notesEl.value = state.notes;
-}
-
-function renderAll() {
-  renderSnapshot();
-  renderPosts();
-  renderCheckins();
-  renderSignals();
-  renderActions();
-  renderNotes();
-}
-
-function openDialog(name) {
-  dialogMap[name].showModal();
-}
-
-function handleForm(name, formatter) {
-  const form = forms[name];
-  form.addEventListener("submit", (event) => {
-    event.preventDefault();
-    const data = new FormData(form);
-    const entry = formatter(Object.fromEntries(data.entries()));
-    state[name + "s"].unshift(entry);
-    saveState();
-    renderAll();
-    form.reset();
-    dialogMap[name].close();
+const renderBars = (container, data) => {
+  container.innerHTML = "";
+  const max = Math.max(...Object.values(data), 1);
+  Object.entries(data).forEach(([label, value]) => {
+    const bar = document.createElement("div");
+    bar.className = "bar";
+    bar.innerHTML = `
+      <strong>${label}</strong>
+      <span style="--fill: ${(value / max) * 100}%"></span>
+      <em>${value}</em>
+    `;
+    container.appendChild(bar);
   });
-}
+};
 
-handleForm("signal", (values) => ({
-  id: crypto.randomUUID(),
-  title: values.title.trim(),
-  theme: values.theme.trim(),
-  segment: values.segment.trim(),
-  urgency: values.urgency,
-  owner: values.owner.trim(),
-  followup: values.followup.trim(),
-  timestamp: new Date().toISOString(),
-}));
+const renderList = (signals) => {
+  elements.list.innerHTML = "";
+  if (!signals.length) {
+    elements.list.innerHTML = "<p>No signals yet. Add one to get started.</p>";
+    return;
+  }
 
-handleForm("post", (values) => ({
-  id: crypto.randomUUID(),
-  name: values.name.trim(),
-  frequency: values.frequency.trim(),
-  trust: Number(values.trust || 3),
-  pulse: values.pulse.trim(),
-}));
+  signals
+    .slice()
+    .sort((a, b) => new Date(b.date) - new Date(a.date))
+    .forEach((signal) => {
+      const card = document.createElement("article");
+      card.className = "signal-card";
+      card.innerHTML = `
+        <div class="signal-meta">
+          <span>${signal.date}</span>
+          <span>${signal.source}</span>
+        </div>
+        <strong>${signal.theme}</strong>
+        <p>${signal.notes}</p>
+        <div class="signal-tags">
+          <span class="tag ${signal.urgency}">${signal.urgency} urgency</span>
+          <span class="tag">${sentimentLabel(signal.sentiment)}</span>
+          ${signal.response_due ? "<span class=\"tag\">Response due</span>" : ""}
+        </div>
+      `;
+      elements.list.appendChild(card);
+    });
+};
 
-handleForm("checkin", (values) => ({
-  id: crypto.randomUUID(),
-  moment: values.moment.trim(),
-  score: Number(values.score || 0),
-  notes: values.notes.trim(),
-}));
+const renderQueue = (signals) => {
+  elements.queue.innerHTML = "";
+  const queue = signals.filter((signal) => signal.response_due || signal.urgency === "high");
+  if (!queue.length) {
+    elements.queue.innerHTML = "<li>No escalations at the moment.</li>";
+    return;
+  }
+  queue.forEach((signal) => {
+    const item = document.createElement("li");
+    item.textContent = `${signal.theme} · ${signal.source} · ${signal.notes}`;
+    elements.queue.appendChild(item);
+  });
+};
 
-handleForm("action", (values) => ({
-  id: crypto.randomUUID(),
-  action: values.action.trim(),
-  owner: values.owner.trim(),
-  due: values.due,
-  status: values.status,
-}));
+const renderInsights = (signals) => {
+  const metrics = deriveMetrics(signals);
+  elements.metrics.total.textContent = metrics.total;
+  elements.metrics.sentiment.textContent = formatNumber(metrics.avgSentiment, 2);
+  elements.metrics.urgent.textContent = metrics.urgent;
+  elements.metrics.due.textContent = metrics.due;
 
-notesEl.addEventListener("input", (event) => {
-  state.notes = event.target.value;
-  saveState();
-});
+  elements.insights.drift.textContent = sentimentLabel(metrics.avgSentiment);
+  elements.insights.theme.textContent = getDominant(signals, "theme");
+  elements.insights.source.textContent = getDominant(signals, "source");
 
-notesEl.addEventListener("blur", saveState);
+  const themeCounts = signals.reduce((acc, signal) => {
+    acc[signal.theme] = (acc[signal.theme] || 0) + 1;
+    return acc;
+  }, {});
+  const urgencyCounts = signals.reduce((acc, signal) => {
+    acc[signal.urgency] = (acc[signal.urgency] || 0) + 1;
+    return acc;
+  }, {});
+  renderBars(elements.insights.themeMix, themeCounts);
+  renderBars(elements.insights.urgencyMix, urgencyCounts);
+};
 
-const addSignalBtn = document.getElementById("add-signal");
-const addPostBtn = document.getElementById("add-post");
-const addCheckinBtn = document.getElementById("add-checkin");
-const addActionBtn = document.getElementById("add-action");
-const exportBtn = document.getElementById("export-data");
-const filterHighBtn = document.getElementById("filter-high");
-const saveNotesBtn = document.getElementById("save-notes");
+const populateFilters = () => {
+  const themes = uniqueValues(state.signals, "theme");
+  elements.filterTheme.innerHTML = "<option value=\"all\">All themes</option>";
+  themes.forEach((theme) => {
+    const option = document.createElement("option");
+    option.value = theme;
+    option.textContent = theme;
+    elements.filterTheme.appendChild(option);
+  });
+};
 
-addSignalBtn.addEventListener("click", () => openDialog("signal"));
-addPostBtn.addEventListener("click", () => openDialog("post"));
-addCheckinBtn.addEventListener("click", () => openDialog("checkin"));
-addActionBtn.addEventListener("click", () => openDialog("action"));
+const getFilteredSignals = () => {
+  const query = elements.search.value.toLowerCase();
+  const theme = elements.filterTheme.value;
+  const urgency = elements.filterUrgency.value;
 
-filterHighBtn.addEventListener("click", () => {
-  filterHighOnly = !filterHighOnly;
-  filterHighBtn.textContent = filterHighOnly ? "Show All Signals" : "Show High Urgency";
-  renderSignals();
-});
+  return state.signals.filter((signal) => {
+    const matchesQuery =
+      signal.notes.toLowerCase().includes(query) ||
+      signal.theme.toLowerCase().includes(query) ||
+      signal.source.toLowerCase().includes(query);
+    const matchesTheme = theme === "all" || signal.theme === theme;
+    const matchesUrgency = urgency === "all" || signal.urgency === urgency;
+    return matchesQuery && matchesTheme && matchesUrgency;
+  });
+};
 
-exportBtn.addEventListener("click", () => {
-  const payload = {
-    exportedAt: new Date().toISOString(),
-    snapshot: {
-      signals: state.signals.length,
-      highUrgency: state.signals.filter((signal) => signal.urgency === "High").length,
-      avgSentiment: state.checkins.length
-        ? state.checkins.reduce((sum, checkin) => sum + Number(checkin.score || 0), 0) /
-          state.checkins.length
-        : 0,
-      openActions: state.actions.filter((action) => action.status !== "Done").length,
-    },
-    data: state,
-  };
+const renderAll = () => {
+  populateFilters();
+  const filtered = getFilteredSignals();
+  renderList(filtered);
+  renderQueue(filtered);
+  renderInsights(state.signals);
+};
 
-  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = "community-pulse.json";
-  link.click();
-  URL.revokeObjectURL(url);
-});
+const addSignal = (signal) => {
+  state.signals.unshift(signal);
+  saveSignals(state.signals);
+  renderAll();
+};
 
-saveNotesBtn.addEventListener("click", () => {
-  saveState();
-  saveNotesBtn.textContent = "Saved";
-  setTimeout(() => {
-    saveNotesBtn.textContent = "Save Notes";
-  }, 1200);
-});
+const wireEvents = () => {
+  [elements.search, elements.filterTheme, elements.filterUrgency].forEach((element) => {
+    element.addEventListener("input", renderAll);
+    element.addEventListener("change", renderAll);
+  });
 
-renderAll();
+  elements.form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const formData = new FormData(elements.form);
+    const signal = {
+      id: `sig-${Date.now()}`,
+      date: today(),
+      source: formData.get("source"),
+      theme: formData.get("theme"),
+      sentiment: Number(formData.get("sentiment")),
+      urgency: formData.get("urgency"),
+      notes: formData.get("notes"),
+      response_due: formData.get("response_due") === "on",
+    };
+    addSignal(signal);
+    elements.form.reset();
+  });
+
+  elements.seed.addEventListener("click", () => {
+    if (!state.signals.length) {
+      state.signals = seedSignals.slice();
+    } else {
+      state.signals = [...seedSignals, ...state.signals];
+    }
+    saveSignals(state.signals);
+    renderAll();
+  });
+
+  elements.export.addEventListener("click", () => {
+    const payload = JSON.stringify(state.signals, null, 2);
+    const blob = new Blob([payload], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `community-pulse-${today()}.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  });
+
+  elements.reset.addEventListener("click", () => {
+    localStorage.removeItem(storageKey);
+    state.signals = [];
+    renderAll();
+  });
+};
+
+const init = () => {
+  renderAll();
+  wireEvents();
+};
+
+init();
