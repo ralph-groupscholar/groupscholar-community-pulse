@@ -59,6 +59,28 @@
       </div>
     </section>
 
+    <section class="panel momentum">
+      <div class="momentum-header">
+        <h2>Momentum snapshot</h2>
+        <p class="hint">Compares the last 7 days against the prior week.</p>
+      </div>
+      <div class="momentum-grid">
+        <div>
+          <p class="label">Volume delta</p>
+          <h3 id="momentum-volume">0%</h3>
+        </div>
+        <div>
+          <p class="label">Sentiment delta</p>
+          <h3 id="momentum-sentiment">0.0</h3>
+        </div>
+        <div>
+          <p class="label">Urgency ratio</p>
+          <h3 id="momentum-urgency">0%</h3>
+        </div>
+      </div>
+      <div class="mini-bars" id="source-mix"></div>
+    </section>
+
     <section class="panel entry">
       <h2>Add a signal</h2>
       <form id="signal-form">
@@ -158,6 +180,14 @@
       </div>
     </section>
 
+    <section class="panel triage">
+      <div class="panel-head">
+        <h2>Signal triage</h2>
+        <p class="hint">Auto-routes signals into listen, act, or escalate lanes.</p>
+      </div>
+      <div class="triage-grid" id="triage-grid"></div>
+    </section>
+
     <section class="panel feed">
       <div class="feed-header">
         <h2>Signal feed</h2>
@@ -171,6 +201,14 @@
       <p class="hint">Summaries last 7 days of signals. Click generate to refresh.</p>
       <div id="digest-output" class="digest-body">
         <p>No digest generated yet.</p>
+      </div>
+    </section>
+
+    <section class="panel playbook">
+      <h2>Response playbook</h2>
+      <p class="hint">Recommendations based on the last 7 days of signals.</p>
+      <div id="playbook-output" class="playbook-body">
+        <p>No playbook generated yet.</p>
       </div>
     </section>
 
