@@ -81,17 +81,43 @@
       <div class="mini-bars" id="source-mix"></div>
     </section>
 
+    <section class="panel listening">
+      <div class="panel-head">
+        <h2>Listening health</h2>
+        <p class="hint">Coverage and freshness by listening post.</p>
+      </div>
+      <div class="health-summary" id="health-summary"></div>
+      <div class="health-table">
+        <div class="health-row health-head">
+          <span>Channel</span>
+          <span>Last signal</span>
+          <span>Volume (14d)</span>
+          <span>Sentiment</span>
+          <span>Status</span>
+        </div>
+        <div id="health-rows"></div>
+      </div>
+    </section>
+
+    <section class="panel alerts">
+      <div class="panel-head">
+        <h2>Alert desk</h2>
+        <p class="hint">Anomalies that need a human follow-up.</p>
+      </div>
+      <ul class="alert-list" id="alert-list"></ul>
+    </section>
+
     <section class="panel entry">
       <h2>Add a signal</h2>
       <form id="signal-form">
         <div class="field-row">
           <label>
             Title
-            <input type="text" id="title" placeholder="Scholar support request" required />
+            <input type="text" id="title" name="title" placeholder="Scholar support request" required />
           </label>
           <label>
             Source
-            <select id="source">
+            <select id="source" name="source">
               <option>Scholar</option>
               <option>Partner</option>
               <option>Mentor</option>
@@ -103,19 +129,19 @@
         </div>
         <label>
           Notes
-          <textarea id="notes" rows="4" placeholder="Capture the key sentiment or request." required></textarea>
+          <textarea id="notes" name="notes" rows="4" placeholder="Capture the key sentiment or request." required></textarea>
         </label>
         <div class="field-row">
           <label>
             Sentiment (1-5)
-            <input type="range" id="sentiment" min="1" max="5" step="1" value="3" />
+            <input type="range" id="sentiment" name="sentiment" min="1" max="5" step="1" value="3" />
           </label>
           <div class="sentiment-display" id="sentiment-display">3 · Neutral</div>
         </div>
         <div class="field-row">
           <label>
             Urgency
-            <select id="urgency">
+            <select id="urgency" name="urgency">
               <option value="low">Low</option>
               <option value="medium" selected>Medium</option>
               <option value="high">High</option>
@@ -123,12 +149,12 @@
           </label>
           <label>
             Location
-            <input type="text" id="location" placeholder="Detroit, MI" />
+            <input type="text" id="location" name="location" placeholder="Detroit, MI" />
           </label>
         </div>
         <label>
           Tags
-          <input type="text" id="tags" placeholder="housing, internship, onboarding" />
+          <input type="text" id="tags" name="tags" placeholder="housing, internship, onboarding" />
         </label>
         <div class="actions">
           <button type="submit">Log signal</button>
@@ -220,21 +246,21 @@
         <div class="field-row">
           <label>
             Commitment
-            <input type="text" id="commitment" placeholder="Improve internship onboarding" required />
+            <input type="text" id="commitment" name="commitment" placeholder="Improve internship onboarding" required />
           </label>
           <label>
             Owner
-            <input type="text" id="owner" placeholder="Program Lead" required />
+            <input type="text" id="owner" name="owner" placeholder="Program Lead" required />
           </label>
         </div>
         <div class="field-row">
           <label>
             Due
-            <input type="date" id="due" required />
+            <input type="date" id="due" name="due" required />
           </label>
           <label>
             Status
-            <select id="status">
+            <select id="status" name="status">
               <option>Planning</option>
               <option>In progress</option>
               <option>Blocked</option>

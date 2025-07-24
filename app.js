@@ -34,6 +34,11 @@ const momentumVolume = document.getElementById("momentum-volume");
 const momentumSentiment = document.getElementById("momentum-sentiment");
 const momentumUrgency = document.getElementById("momentum-urgency");
 const sourceMix = document.getElementById("source-mix");
+const healthSummary = document.getElementById("health-summary");
+const healthRows = document.getElementById("health-rows");
+const alertList = document.getElementById("alert-list");
+const triageGrid = document.getElementById("triage-grid");
+const playbookOutput = document.getElementById("playbook-output");
 
 const searchInput = document.getElementById("search");
 const filterSource = document.getElementById("filter-source");
@@ -54,6 +59,15 @@ const sentimentLabels = {
   4: "Positive",
   5: "Celebratory"
 };
+
+const defaultSources = [
+  "Scholar",
+  "Partner",
+  "Mentor",
+  "Staff",
+  "Ambassador",
+  "Community Event"
+];
 
 const sampleSignals = [
   {
@@ -156,6 +170,22 @@ function isWithinDays(dateString, days) {
   return diff <= days * 24 * 60 * 60 * 1000;
 }
 
+function getDaysAgo(dateString) {
+  const date = parseDate(dateString);
+  const now = new Date();
+  const diff = now - date;
+  return Math.floor(diff / (24 * 60 * 60 * 1000));
+}
+
+function getSignalsInRange(signals, startDaysAgoExclusive, endDaysAgoInclusive) {
+  return signals.filter((signal) => {
+    const daysAgo = getDaysAgo(signal.createdAt);
+    return (
+      daysAgo > startDaysAgoExclusive && daysAgo <= endDaysAgoInclusive
+    );
+  });
+}
+
 function getTopTag(signals) {
   const counts = {};
   signals.forEach((signal) => {
@@ -218,6 +248,382 @@ function updateMetrics(signals) {
   metricUrgent.textContent = urgent;
   metricWeek.textContent = weekCount;
   metricTag.textContent = getTopTag(signals);
+}
+
+function formatDelta(value, suffix) {
+  if (value === null) return "—";
+  const sign = value > 0 ? "+" : "";
+  return `${sign}${value}${suffix}`;
+}
+
+function updateMomentum(signals) {
+  if (!signals.length) {
+    momentumVolume.textContent = "0%";
+    momentumSentiment.textContent = "0.0";
+    momentumUrgency.textContent = "0%";
+    sourceMix.innerHTML = "<p>No signal sources yet.</p>";
+    return;
+  }
+
+  const recent = getSignalsInRange(signals, -1, 7);
+  const prior = getSignalsInRange(signals, 7, 14);
+
+  const volumeDelta = prior.length
+    ? Math.round(((recent.length - prior.length) / prior.length) * 100)
+    : recent.length
+      ? null
+      : 0;
+
+  const recentAvg = recent.length
+    ? recent.reduce((sum, signal) => sum + signal.sentiment, 0) / recent.length
+    : null;
+  const priorAvg = prior.length
+    ? prior.reduce((sum, signal) => sum + signal.sentiment, 0) / prior.length
+    : null;
+
+  const sentimentDelta =
+    recentAvg !== null && priorAvg !== null
+      ? Number((recentAvg - priorAvg).toFixed(1))
+      : null;
+
+  const recentUrgentShare = recent.length
+    ? recent.filter((signal) => signal.urgency === "high").length / recent.length
+    : null;
+  const priorUrgentShare = prior.length
+    ? prior.filter((signal) => signal.urgency === "high").length / prior.length
+    : null;
+
+  const urgencyDelta =
+    recentUrgentShare !== null && priorUrgentShare !== null
+      ? Math.round((recentUrgentShare - priorUrgentShare) * 100)
+      : null;
+
+  momentumVolume.textContent =
+    volumeDelta === null ? "New" : formatDelta(volumeDelta, "%");
+  momentumSentiment.textContent = formatDelta(sentimentDelta, "");
+  momentumUrgency.textContent = formatDelta(urgencyDelta, "%");
+
+  const windowSignals = signals.filter((signal) =>
+    isWithinDays(signal.createdAt, 14)
+  );
+  if (!windowSignals.length) {
+    sourceMix.innerHTML = "<p class=\"hint\">No recent source mix yet.</p>";
+    return;
+  }
+
+  const counts = windowSignals.reduce((acc, signal) => {
+    acc[signal.source] = (acc[signal.source] || 0) + 1;
+    return acc;
+  }, {});
+
+  const total = windowSignals.length || 1;
+  const sources = Array.from(
+    new Set([...defaultSources, ...Object.keys(counts)])
+  );
+  sourceMix.innerHTML = "";
+  sources
+    .filter((source) => counts[source])
+    .sort((a, b) => counts[b] - counts[a])
+    .forEach((source) => {
+      const count = counts[source];
+      const percentage = Math.round((count / total) * 100);
+      const bar = document.createElement("div");
+      bar.className = "mini-bar";
+      bar.innerHTML = `
+        <div>${source}</div>
+        <span style="--fill: ${percentage}%"></span>
+        <strong>${percentage}%</strong>
+      `;
+      sourceMix.appendChild(bar);
+    });
+}
+
+function getSourceStats(signals) {
+  const sources = Array.from(
+    new Set([...defaultSources, ...signals.map((signal) => signal.source)])
+  );
+  return sources.map((source) => {
+    const items = signals.filter((signal) => signal.source === source);
+    const total = items.length;
+    const lastDate = total
+      ? items.reduce(
+          (latest, signal) =>
+            parseDate(signal.createdAt) > parseDate(latest)
+              ? signal.createdAt
+              : latest,
+          items[0].createdAt
+        )
+      : null;
+    const lastDays = lastDate ? getDaysAgo(lastDate) : null;
+    const last14 = items.filter((signal) => isWithinDays(signal.createdAt, 14))
+      .length;
+    const urgent14 = items.filter(
+      (signal) =>
+        signal.urgency === "high" && isWithinDays(signal.createdAt, 14)
+    ).length;
+    const avgSentiment = total
+      ? (
+          items.reduce((sum, signal) => sum + signal.sentiment, 0) / total
+        ).toFixed(1)
+      : "—";
+    let status = "No data";
+    if (total) {
+      if (lastDays <= 7) status = "Active";
+      else if (lastDays <= 14) status = "Fading";
+      else status = "Silent";
+    }
+    return {
+      source,
+      total,
+      lastDate,
+      lastDays,
+      last14,
+      urgent14,
+      avgSentiment,
+      status
+    };
+  });
+}
+
+function renderListeningHealth(signals) {
+  const stats = getSourceStats(signals);
+  const activeCount = stats.filter((item) => item.last14 > 0).length;
+  const silentCount = stats.filter((item) => item.status === "Silent").length;
+  const fadingCount = stats.filter((item) => item.status === "Fading").length;
+  const topUrgent = stats
+    .filter((item) => item.last14 > 0)
+    .sort((a, b) => b.urgent14 - a.urgent14)[0];
+
+  healthSummary.innerHTML = `
+    <div class="summary-card">
+      <span class="label">Active channels</span>
+      <strong>${activeCount}/${stats.length}</strong>
+    </div>
+    <div class="summary-card">
+      <span class="label">Fading signals</span>
+      <strong>${fadingCount}</strong>
+    </div>
+    <div class="summary-card">
+      <span class="label">Silent channels</span>
+      <strong>${silentCount}</strong>
+    </div>
+    <div class="summary-card">
+      <span class="label">Urgency hotspot</span>
+      <strong>${topUrgent ? topUrgent.source : "—"}</strong>
+    </div>
+  `;
+
+  healthRows.innerHTML = "";
+  stats
+    .sort((a, b) => b.last14 - a.last14)
+    .forEach((item) => {
+      const row = document.createElement("div");
+      row.className = "health-row";
+      const statusClass =
+        item.status === "Active"
+          ? "status-active"
+          : item.status === "Fading"
+            ? "status-fading"
+            : item.status === "Silent"
+              ? "status-silent"
+              : "status-empty";
+      row.innerHTML = `
+        <span>${item.source}</span>
+        <span>${item.lastDate ? `${item.lastDate} (${item.lastDays}d)` : "—"}</span>
+        <span>${item.last14}</span>
+        <span>${item.avgSentiment}</span>
+        <span class="status-badge ${statusClass}">${item.status}</span>
+      `;
+      healthRows.appendChild(row);
+    });
+
+  renderAlertDesk(stats);
+}
+
+function renderAlertDesk(stats) {
+  const alerts = [];
+  stats.forEach((item) => {
+    if (!item.total) {
+      alerts.push({
+        tone: "low",
+        text: `No signals logged yet for ${item.source}.`
+      });
+      return;
+    }
+    if (item.status === "Silent") {
+      alerts.push({
+        tone: "high",
+        text: `No recent signals from ${item.source} in ${item.lastDays} days.`
+      });
+    } else if (item.status === "Fading") {
+      alerts.push({
+        tone: "medium",
+        text: `Signals are slowing in ${item.source} (last seen ${item.lastDays} days ago).`
+      });
+    }
+    if (item.last14 >= 3) {
+      const urgencyRatio = item.urgent14 / item.last14;
+      if (urgencyRatio >= 0.4) {
+        alerts.push({
+          tone: "high",
+          text: `Elevated urgency in ${item.source} (${Math.round(
+            urgencyRatio * 100
+          )}% high).`
+        });
+      }
+    }
+    if (item.avgSentiment !== "—" && Number(item.avgSentiment) <= 2.5) {
+      alerts.push({
+        tone: "medium",
+        text: `Sentiment concern in ${item.source} (avg ${item.avgSentiment}).`
+      });
+    }
+  });
+
+  alertList.innerHTML = "";
+  if (!alerts.length) {
+    alertList.innerHTML = "<li>All clear. No anomalies detected.</li>";
+    return;
+  }
+  alerts
+    .sort((a, b) => {
+      const order = { high: 0, medium: 1, low: 2 };
+      return order[a.tone] - order[b.tone];
+    })
+    .forEach((alert) => {
+      const item = document.createElement("li");
+      if (alert.tone === "high") {
+        item.className = "alert-high";
+      }
+      item.textContent = alert.text;
+      alertList.appendChild(item);
+    });
+}
+
+function getRecentSignals(signals, days) {
+  return signals.filter((signal) => isWithinDays(signal.createdAt, days));
+}
+
+function classifySignal(signal) {
+  if (signal.urgency === "high" || signal.sentiment <= 2) {
+    return {
+      lane: "Escalate",
+      reason:
+        signal.urgency === "high"
+          ? "High urgency"
+          : "Low sentiment trigger"
+    };
+  }
+  if (signal.urgency === "medium" || signal.sentiment === 3) {
+    return { lane: "Act", reason: "Needs follow-up" };
+  }
+  return { lane: "Listen", reason: "Monitor pulse" };
+}
+
+function renderTriage(signals) {
+  const recent = getRecentSignals(signals, 7);
+  triageGrid.innerHTML = "";
+  if (!recent.length) {
+    triageGrid.innerHTML = "<p>No recent signals to triage yet.</p>";
+    return;
+  }
+
+  const lanes = {
+    Escalate: [],
+    Act: [],
+    Listen: []
+  };
+
+  recent.forEach((signal) => {
+    const classification = classifySignal(signal);
+    lanes[classification.lane].push({ signal, ...classification });
+  });
+
+  Object.entries(lanes).forEach(([lane, items]) => {
+    const column = document.createElement("div");
+    column.className = "triage-column";
+
+    const header = document.createElement("div");
+    header.className = "triage-head";
+    header.innerHTML = `<h3>${lane}</h3><span>${items.length} signals</span>`;
+    column.appendChild(header);
+
+    const stack = document.createElement("div");
+    stack.className = "triage-stack";
+    if (!items.length) {
+      stack.innerHTML = "<p class=\"hint\">No signals in this lane.</p>";
+    } else {
+      items
+        .sort((a, b) => parseDate(b.signal.createdAt) - parseDate(a.signal.createdAt))
+        .forEach((item) => {
+          const card = document.createElement("div");
+          card.className = "triage-card";
+          card.innerHTML = `
+            <h4>${item.signal.title}</h4>
+            <p>${item.signal.notes}</p>
+            <div class="triage-meta">
+              <span>${item.signal.source}</span>
+              <span>${item.signal.createdAt}</span>
+              <span>${item.signal.urgency.toUpperCase()}</span>
+            </div>
+            <span class="triage-reason">${item.reason}</span>
+          `;
+          stack.appendChild(card);
+        });
+    }
+    column.appendChild(stack);
+    triageGrid.appendChild(column);
+  });
+}
+
+function renderPlaybook(signals) {
+  const recent = getRecentSignals(signals, 7);
+  if (!recent.length) {
+    playbookOutput.innerHTML = "<p>No playbook generated yet.</p>";
+    return;
+  }
+
+  const urgent = recent.filter((signal) => signal.urgency === "high");
+  const lowSentiment = recent.filter((signal) => signal.sentiment <= 2);
+  const topTag = getTopTag(recent);
+  const sourceCounts = recent.reduce((acc, signal) => {
+    acc[signal.source] = (acc[signal.source] || 0) + 1;
+    return acc;
+  }, {});
+  const topSource = Object.entries(sourceCounts).sort((a, b) => b[1] - a[1])[0];
+  const stats = getSourceStats(signals);
+  const silentSource = stats.find((item) => item.status === "Silent");
+
+  const actions = [];
+  if (urgent.length) {
+    actions.push(
+      `Assign owners to ${urgent.length} urgent signals within 48 hours and log commitments.`
+    );
+  }
+  if (lowSentiment.length) {
+    actions.push(
+      `Run listening follow-ups for ${lowSentiment.length} low-sentiment signals, starting with ${topSource ? topSource[0] : "priority channels"}.`
+    );
+  }
+  if (topTag !== "—") {
+    actions.push(
+      `Align next week’s outreach around the ${topTag} theme and track sentiment shifts.`
+    );
+  }
+  if (silentSource) {
+    actions.push(
+      `Re-open the ${silentSource.source} listening post with a targeted check-in or survey.`
+    );
+  }
+  if (!actions.length) {
+    actions.push("Maintain current cadence and keep logging signals daily.");
+  }
+
+  playbookOutput.innerHTML = `
+    <ul>
+      ${actions.map((item) => `<li>${item}</li>`).join("")}
+    </ul>
+  `;
 }
 
 function renderSignalCard(signal) {
@@ -368,6 +774,10 @@ function renderAll() {
   const signals = getSignals();
   const filtered = applyFilters(signals);
   updateMetrics(signals);
+  updateMomentum(signals);
+  renderListeningHealth(signals);
+  renderTriage(signals);
+  renderPlaybook(signals);
   renderFeed(filtered);
 }
 
