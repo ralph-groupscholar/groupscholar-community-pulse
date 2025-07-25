@@ -1,0 +1,10 @@
+{
+  "name": "groupscholar-community-pulse",
+  "version": "0.1.0",
+  "description": "Community feedback, sentiment, and signal tracking for Group Scholar.",
+  "private": true,
+  "type": "commonjs",
+  "dependencies": {
+    "pg": "^8.11.5"
+  }
+}

@@ -51,6 +51,10 @@ const trackerGrid = document.getElementById("tracker-grid");
 
 const SIGNAL_KEY = "gs-community-pulse-signals";
 const TRACKER_KEY = "gs-community-pulse-commitments";
+const REMOTE_SYNC_KEY = "gs-community-pulse-last-sync";
+const REMOTE_COMMITMENTS_SYNC_KEY = "gs-community-pulse-commitments-sync";
+const REMOTE_API = "/api/signals";
+const REMOTE_COMMITMENTS_API = "/api/commitments";
 
 const sentimentLabels = {
   1: "Critical",
@@ -145,13 +149,96 @@ function saveSignals(signals) {
   renderAll();
 }
 
+function isRemoteAvailable() {
+  return ["http:", "https:"].includes(window.location.protocol);
+}
+
+async function fetchRemoteSignals() {
+  if (!isRemoteAvailable()) return [];
+  try {
+    const response = await fetch(REMOTE_API);
+    if (!response.ok) return [];
+    const payload = await response.json();
+    return Array.isArray(payload.signals) ? payload.signals : [];
+  } catch (error) {
+    console.warn("Remote sync unavailable", error);
+    return [];
+  }
+}
+
+async function pushSignalsToRemote(signals) {
+  if (!isRemoteAvailable() || !signals.length) return;
+  try {
+    await fetch(REMOTE_API, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ signals })
+    });
+    storage.set(REMOTE_SYNC_KEY, new Date().toISOString());
+  } catch (error) {
+    console.warn("Failed to sync signals", error);
+  }
+}
+
+function mergeSignals(primary, secondary) {
+  return Array.from(
+    new Map([...primary, ...secondary].map((item) => [item.id, item])).values()
+  );
+}
+
+async function syncRemoteSignals() {
+  const remoteSignals = await fetchRemoteSignals();
+  if (!remoteSignals.length) return;
+  const localSignals = getSignals();
+  const mergedSignals = mergeSignals(remoteSignals, localSignals);
+  saveSignals(mergedSignals);
+}
+
+async function fetchRemoteCommitments() {
+  if (!isRemoteAvailable()) return [];
+  try {
+    const response = await fetch(REMOTE_COMMITMENTS_API);
+    if (!response.ok) return [];
+    const payload = await response.json();
+    return Array.isArray(payload.commitments) ? payload.commitments : [];
+  } catch (error) {
+    console.warn("Remote commitments unavailable", error);
+    return [];
+  }
+}
+
+async function pushCommitmentsToRemote(commitments) {
+  if (!isRemoteAvailable() || !commitments.length) return;
+  try {
+    await fetch(REMOTE_COMMITMENTS_API, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ commitments })
+    });
+    storage.set(REMOTE_COMMITMENTS_SYNC_KEY, new Date().toISOString());
+  } catch (error) {
+    console.warn("Failed to sync commitments", error);
+  }
+}
+
+async function syncRemoteCommitments() {
+  const remoteCommitments = await fetchRemoteCommitments();
+  if (!remoteCommitments.length) return;
+  const localCommitments = getCommitments();
+  const mergedCommitments = mergeSignals(remoteCommitments, localCommitments);
+  saveCommitments(mergedCommitments, { syncRemote: false });
+}
+
 function getCommitments() {
   return storage.get(TRACKER_KEY, []);
 }
 
-function saveCommitments(commitments) {
+function saveCommitments(commitments, { syncRemote = true } = {}) {
   storage.set(TRACKER_KEY, commitments);
   renderCommitments(commitments);
+  if (syncRemote) {
+    pushCommitmentsToRemote(commitments);
+  }
 }
 
 function updateSentimentDisplay(value) {
@@ -803,6 +890,7 @@ function handleSignalSubmit(event) {
 
   const signals = [newSignal, ...getSignals()];
   saveSignals(signals);
+  pushSignalsToRemote([newSignal]);
   signalForm.reset();
   sentimentInput.value = "3";
   updateSentimentDisplay(3);
@@ -831,6 +919,7 @@ function handleSeed() {
     new Map(mergedSignals.map((item) => [item.id, item])).values()
   );
   saveSignals(uniqueSignals);
+  pushSignalsToRemote(sampleSignals);
 
   const commitments = getCommitments();
   const mergedCommitments = [...sampleCommitments, ...commitments];
@@ -838,6 +927,7 @@ function handleSeed() {
     new Map(mergedCommitments.map((item) => [item.id, item])).values()
   );
   saveCommitments(uniqueCommitments);
+  pushCommitmentsToRemote(sampleCommitments);
 }
 
 function handleExport() {
@@ -871,6 +961,7 @@ function handleImport(event) {
         : [];
       if (signals.length) {
         saveSignals(signals);
+        pushSignalsToRemote(signals);
       }
       if (commitments.length) {
         saveCommitments(commitments);
@@ -912,6 +1003,8 @@ function init() {
   updateSourceFilter(getSignals());
   renderAll();
   renderCommitments(getCommitments());
+  syncRemoteSignals();
+  syncRemoteCommitments();
 }
 
 init();

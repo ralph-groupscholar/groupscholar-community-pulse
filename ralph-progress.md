@@ -24,3 +24,8 @@
 ## Iteration 5
 - Implemented the momentum snapshot calculations for volume, sentiment, and urgency shifts.
 - Added dynamic source mix bars so teams can see which listening posts dominate signal intake.
+
+## Iteration 6
+- Added a Postgres-backed signals API with upsert support for shared Community Pulse data.
+- Wired the UI to sync signals to the backend while keeping local-first behavior.
+- Created a seed script and populated the production database with sample signals.
