@@ -1,9 +1,8 @@
 {
   "name": "groupscholar-community-pulse",
-  "version": "0.1.0",
-  "description": "Community feedback, sentiment, and signal tracking for Group Scholar.",
+  "version": "1.0.0",
   "private": true,
-  "type": "commonjs",
+  "description": "Group Scholar Community Pulse dashboard",
   "dependencies": {
     "pg": "^8.11.5"
   }

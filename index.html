@@ -206,6 +206,24 @@
       </div>
     </section>
 
+    <section class="panel data-mode">
+      <div class="panel-head">
+        <h2>Data mode</h2>
+        <p class="hint">Toggle between local-only storage and shared cloud sync.</p>
+      </div>
+      <div class="data-mode-card">
+        <div>
+          <p class="label">Status</p>
+          <h3 id="data-mode-status">Local only</h3>
+          <p class="hint" id="data-mode-detail">Stored in your browser.</p>
+        </div>
+        <div class="data-actions">
+          <button type="button" class="ghost" id="data-mode-toggle">Use cloud sync</button>
+          <button type="button" class="ghost" id="data-refresh">Refresh from cloud</button>
+        </div>
+      </div>
+    </section>
+
     <section class="panel triage">
       <div class="panel-head">
         <h2>Signal triage</h2>
@@ -274,7 +292,7 @@
   </main>
 
   <footer class="footer">
-    <p>Local-first Community Pulse · Data stored in your browser only.</p>
+    <p id="data-footer">Local-first Community Pulse · Data stored in your browser only.</p>
   </footer>
 
   <script src="app.js"></script>

@@ -408,6 +408,17 @@ textarea {
   gap: 10px;
 }
 
+.data-mode-card {
+  display: grid;
+  gap: 16px;
+}
+
+.data-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 button {
   border-radius: 12px;
   border: none;
@@ -423,6 +434,11 @@ button.ghost,
   background: transparent;
   color: var(--ink);
   border: 1px solid var(--line);
+}
+
+button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .file-upload {

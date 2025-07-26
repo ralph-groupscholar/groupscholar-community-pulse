@@ -49,12 +49,15 @@ const filterTag = document.getElementById("filter-tag");
 const trackerForm = document.getElementById("tracker-form");
 const trackerGrid = document.getElementById("tracker-grid");
 
+const dataModeStatus = document.getElementById("data-mode-status");
+const dataModeDetail = document.getElementById("data-mode-detail");
+const dataModeToggle = document.getElementById("data-mode-toggle");
+const dataRefreshBtn = document.getElementById("data-refresh");
+const dataFooter = document.getElementById("data-footer");
+
 const SIGNAL_KEY = "gs-community-pulse-signals";
 const TRACKER_KEY = "gs-community-pulse-commitments";
-const REMOTE_SYNC_KEY = "gs-community-pulse-last-sync";
-const REMOTE_COMMITMENTS_SYNC_KEY = "gs-community-pulse-commitments-sync";
-const REMOTE_API = "/api/signals";
-const REMOTE_COMMITMENTS_API = "/api/commitments";
+const MODE_KEY = "gs-community-pulse-mode";
 
 const sentimentLabels = {
   1: "Critical",
@@ -139,106 +142,36 @@ const sampleCommitments = [
   }
 ];
 
-function getSignals() {
-  return storage.get(SIGNAL_KEY, []);
-}
+let signalStore = storage.get(SIGNAL_KEY, []);
+let commitmentStore = storage.get(TRACKER_KEY, []);
+let remoteAvailable = false;
+let dataMode = "local";
+let lastSync = null;
+let modePreference = storage.get(MODE_KEY, "auto");
 
-function saveSignals(signals) {
-  storage.set(SIGNAL_KEY, signals);
+function setSignals(signals, persist = true) {
+  signalStore = signals;
+  if (persist) {
+    storage.set(SIGNAL_KEY, signals);
+  }
   updateSourceFilter(signals);
   renderAll();
 }
 
-function isRemoteAvailable() {
-  return ["http:", "https:"].includes(window.location.protocol);
-}
-
-async function fetchRemoteSignals() {
-  if (!isRemoteAvailable()) return [];
-  try {
-    const response = await fetch(REMOTE_API);
-    if (!response.ok) return [];
-    const payload = await response.json();
-    return Array.isArray(payload.signals) ? payload.signals : [];
-  } catch (error) {
-    console.warn("Remote sync unavailable", error);
-    return [];
+function setCommitments(commitments, persist = true) {
+  commitmentStore = commitments;
+  if (persist) {
+    storage.set(TRACKER_KEY, commitments);
   }
+  renderCommitments(commitments);
 }
 
-async function pushSignalsToRemote(signals) {
-  if (!isRemoteAvailable() || !signals.length) return;
-  try {
-    await fetch(REMOTE_API, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ signals })
-    });
-    storage.set(REMOTE_SYNC_KEY, new Date().toISOString());
-  } catch (error) {
-    console.warn("Failed to sync signals", error);
-  }
-}
-
-function mergeSignals(primary, secondary) {
-  return Array.from(
-    new Map([...primary, ...secondary].map((item) => [item.id, item])).values()
-  );
-}
-
-async function syncRemoteSignals() {
-  const remoteSignals = await fetchRemoteSignals();
-  if (!remoteSignals.length) return;
-  const localSignals = getSignals();
-  const mergedSignals = mergeSignals(remoteSignals, localSignals);
-  saveSignals(mergedSignals);
-}
-
-async function fetchRemoteCommitments() {
-  if (!isRemoteAvailable()) return [];
-  try {
-    const response = await fetch(REMOTE_COMMITMENTS_API);
-    if (!response.ok) return [];
-    const payload = await response.json();
-    return Array.isArray(payload.commitments) ? payload.commitments : [];
-  } catch (error) {
-    console.warn("Remote commitments unavailable", error);
-    return [];
-  }
-}
-
-async function pushCommitmentsToRemote(commitments) {
-  if (!isRemoteAvailable() || !commitments.length) return;
-  try {
-    await fetch(REMOTE_COMMITMENTS_API, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ commitments })
-    });
-    storage.set(REMOTE_COMMITMENTS_SYNC_KEY, new Date().toISOString());
-  } catch (error) {
-    console.warn("Failed to sync commitments", error);
-  }
-}
-
-async function syncRemoteCommitments() {
-  const remoteCommitments = await fetchRemoteCommitments();
-  if (!remoteCommitments.length) return;
-  const localCommitments = getCommitments();
-  const mergedCommitments = mergeSignals(remoteCommitments, localCommitments);
-  saveCommitments(mergedCommitments, { syncRemote: false });
+function getSignals() {
+  return signalStore;
 }
 
 function getCommitments() {
-  return storage.get(TRACKER_KEY, []);
-}
-
-function saveCommitments(commitments, { syncRemote = true } = {}) {
-  storage.set(TRACKER_KEY, commitments);
-  renderCommitments(commitments);
-  if (syncRemote) {
-    pushCommitmentsToRemote(commitments);
-  }
+  return commitmentStore;
 }
 
 function updateSentimentDisplay(value) {
@@ -840,9 +773,18 @@ function renderCommitments(commitments) {
       }
       statusSelect.appendChild(option);
     });
-    statusSelect.addEventListener("change", () => {
+    statusSelect.addEventListener("change", async () => {
       item.status = statusSelect.value;
-      saveCommitments(commitments);
+      if (dataMode === "cloud") {
+        const updated = await updateCommitmentRemote(item.id, item.status);
+        if (updated) {
+          setCommitments(updated);
+        } else {
+          setCommitments(commitments);
+        }
+      } else {
+        setCommitments(commitments);
+      }
     });
 
     header.innerHTML = `<span>${item.owner}</span><span>Due ${item.due}</span>`;
@@ -868,7 +810,172 @@ function renderAll() {
   renderFeed(filtered);
 }
 
-function handleSignalSubmit(event) {
+function handleResetFilters() {
+  searchInput.value = "";
+  filterSource.value = "all";
+  filterUrgency.value = "all";
+  filterSentiment.value = "1";
+  filterTag.value = "";
+  renderAll();
+}
+
+function setDataStatus() {
+  if (dataMode === "cloud") {
+    const syncText = lastSync
+      ? `Last sync ${lastSync.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+      : "Sync ready";
+    dataModeStatus.textContent = "Cloud sync";
+    dataModeDetail.textContent = `Shared workspace mode · ${syncText}.`;
+    dataModeToggle.textContent = "Use local only";
+    dataModeToggle.disabled = false;
+    dataRefreshBtn.disabled = !remoteAvailable;
+    dataFooter.textContent =
+      "Community Pulse · Cloud sync enabled for shared teams.";
+    return;
+  }
+
+  dataModeStatus.textContent = "Local only";
+  dataModeDetail.textContent = remoteAvailable
+    ? "Cloud available; staying local on this device."
+    : "Stored in your browser only.";
+  dataModeToggle.textContent = remoteAvailable
+    ? "Use cloud sync"
+    : "Cloud unavailable";
+  dataModeToggle.disabled = !remoteAvailable;
+  dataRefreshBtn.disabled = !remoteAvailable;
+  dataFooter.textContent =
+    "Local-first Community Pulse · Data stored in your browser only.";
+}
+
+async function fetchJson(url, options = {}) {
+  const response = await fetch(url, {
+    headers: { "Content-Type": "application/json" },
+    ...options
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text || "Request failed");
+  }
+  return response.json();
+}
+
+async function checkRemote() {
+  try {
+    const response = await fetch("/api/health", { cache: "no-store" });
+    if (!response.ok) throw new Error("Health check failed");
+    const data = await response.json();
+    remoteAvailable = Boolean(data.ok);
+  } catch (error) {
+    remoteAvailable = false;
+  }
+}
+
+async function refreshFromRemote() {
+  try {
+    const [signalsData, commitmentsData] = await Promise.all([
+      fetchJson("/api/signals"),
+      fetchJson("/api/commitments")
+    ]);
+    setSignals(signalsData.signals || []);
+    setCommitments(commitmentsData.commitments || []);
+    lastSync = new Date();
+    remoteAvailable = true;
+    dataMode = "cloud";
+    setDataStatus();
+    return true;
+  } catch (error) {
+    remoteAvailable = false;
+    dataMode = "local";
+    setDataStatus();
+    return false;
+  }
+}
+
+async function createSignalRemote(signal) {
+  try {
+    const data = await fetchJson("/api/signals", {
+      method: "POST",
+      body: JSON.stringify(signal)
+    });
+    lastSync = new Date();
+    remoteAvailable = true;
+    dataMode = "cloud";
+    setDataStatus();
+    return data.signals || [];
+  } catch (error) {
+    remoteAvailable = false;
+    dataMode = "local";
+    setDataStatus();
+    return null;
+  }
+}
+
+async function createCommitmentRemote(commitment) {
+  try {
+    const data = await fetchJson("/api/commitments", {
+      method: "POST",
+      body: JSON.stringify(commitment)
+    });
+    lastSync = new Date();
+    remoteAvailable = true;
+    dataMode = "cloud";
+    setDataStatus();
+    return data.commitments || [];
+  } catch (error) {
+    remoteAvailable = false;
+    dataMode = "local";
+    setDataStatus();
+    return null;
+  }
+}
+
+async function updateCommitmentRemote(id, status) {
+  try {
+    const data = await fetchJson("/api/commitments", {
+      method: "PUT",
+      body: JSON.stringify({ id, status })
+    });
+    lastSync = new Date();
+    remoteAvailable = true;
+    dataMode = "cloud";
+    setDataStatus();
+    return data.commitments || [];
+  } catch (error) {
+    remoteAvailable = false;
+    dataMode = "local";
+    setDataStatus();
+    return null;
+  }
+}
+
+async function seedRemote() {
+  try {
+    await fetchJson("/api/seed", { method: "POST" });
+    lastSync = new Date();
+    remoteAvailable = true;
+    return true;
+  } catch (error) {
+    remoteAvailable = false;
+    return false;
+  }
+}
+
+async function importRemote(payload) {
+  try {
+    await fetchJson("/api/import", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+    lastSync = new Date();
+    remoteAvailable = true;
+    return true;
+  } catch (error) {
+    remoteAvailable = false;
+    return false;
+  }
+}
+
+async function handleSignalSubmit(event) {
   event.preventDefault();
   const formData = new FormData(signalForm);
   const newSignal = {
@@ -888,15 +995,23 @@ function handleSignalSubmit(event) {
     createdAt: new Date().toISOString().slice(0, 10)
   };
 
-  const signals = [newSignal, ...getSignals()];
-  saveSignals(signals);
-  pushSignalsToRemote([newSignal]);
+  if (dataMode === "cloud") {
+    const updated = await createSignalRemote(newSignal);
+    if (updated) {
+      setSignals(updated);
+    } else {
+      setSignals([newSignal, ...getSignals()]);
+    }
+  } else {
+    setSignals([newSignal, ...getSignals()]);
+  }
+
   signalForm.reset();
   sentimentInput.value = "3";
   updateSentimentDisplay(3);
 }
 
-function handleCommitmentSubmit(event) {
+async function handleCommitmentSubmit(event) {
   event.preventDefault();
   const formData = new FormData(trackerForm);
   const commitment = {
@@ -907,32 +1022,49 @@ function handleCommitmentSubmit(event) {
     status: formData.get("status").toString(),
     createdAt: new Date().toISOString().slice(0, 10)
   };
-  const commitments = [commitment, ...getCommitments()];
-  saveCommitments(commitments);
+
+  if (dataMode === "cloud") {
+    const updated = await createCommitmentRemote(commitment);
+    if (updated) {
+      setCommitments(updated);
+    } else {
+      setCommitments([commitment, ...getCommitments()]);
+    }
+  } else {
+    setCommitments([commitment, ...getCommitments()]);
+  }
+
   trackerForm.reset();
 }
 
-function handleSeed() {
+async function handleSeed() {
+  if (dataMode === "cloud") {
+    const seeded = await seedRemote();
+    if (seeded) {
+      await refreshFromRemote();
+    }
+    return;
+  }
+
   const signals = getSignals();
   const mergedSignals = [...sampleSignals, ...signals];
   const uniqueSignals = Array.from(
     new Map(mergedSignals.map((item) => [item.id, item])).values()
   );
-  saveSignals(uniqueSignals);
-  pushSignalsToRemote(sampleSignals);
+  setSignals(uniqueSignals);
 
   const commitments = getCommitments();
   const mergedCommitments = [...sampleCommitments, ...commitments];
   const uniqueCommitments = Array.from(
     new Map(mergedCommitments.map((item) => [item.id, item])).values()
   );
-  saveCommitments(uniqueCommitments);
-  pushCommitmentsToRemote(sampleCommitments);
+  setCommitments(uniqueCommitments);
 }
 
 function handleExport() {
   const payload = {
     generatedAt: new Date().toISOString(),
+    dataMode,
     signals: getSignals(),
     commitments: getCommitments()
   };
@@ -952,19 +1084,27 @@ function handleImport(event) {
   if (!file) return;
 
   const reader = new FileReader();
-  reader.onload = () => {
+  reader.onload = async () => {
     try {
       const parsed = JSON.parse(reader.result);
       const signals = Array.isArray(parsed.signals) ? parsed.signals : [];
       const commitments = Array.isArray(parsed.commitments)
         ? parsed.commitments
         : [];
+
+      if (dataMode === "cloud" && remoteAvailable) {
+        const imported = await importRemote({ signals, commitments });
+        if (imported) {
+          await refreshFromRemote();
+          return;
+        }
+      }
+
       if (signals.length) {
-        saveSignals(signals);
-        pushSignalsToRemote(signals);
+        setSignals(signals);
       }
       if (commitments.length) {
-        saveCommitments(commitments);
+        setCommitments(commitments);
       }
     } catch (error) {
       console.error("Failed to import JSON", error);
@@ -973,13 +1113,29 @@ function handleImport(event) {
   reader.readAsText(file);
 }
 
-function handleResetFilters() {
-  searchInput.value = "";
-  filterSource.value = "all";
-  filterUrgency.value = "all";
-  filterSentiment.value = "1";
-  filterTag.value = "";
-  renderAll();
+async function handleToggleMode() {
+  if (dataMode === "cloud") {
+    modePreference = "local";
+    storage.set(MODE_KEY, "local");
+    dataMode = "local";
+    setDataStatus();
+    return;
+  }
+
+  modePreference = "auto";
+  storage.set(MODE_KEY, "auto");
+  await checkRemote();
+  if (remoteAvailable) {
+    await refreshFromRemote();
+  } else {
+    dataMode = "local";
+    setDataStatus();
+  }
+}
+
+async function handleRefreshRemote() {
+  if (!remoteAvailable) return;
+  await refreshFromRemote();
 }
 
 sentimentInput.addEventListener("input", (event) => {
@@ -993,18 +1149,29 @@ digestBtn.addEventListener("click", () => renderDigest(getSignals()));
 exportBtn.addEventListener("click", handleExport);
 importInput.addEventListener("change", handleImport);
 resetFiltersBtn.addEventListener("click", handleResetFilters);
+dataModeToggle.addEventListener("click", handleToggleMode);
+dataRefreshBtn.addEventListener("click", handleRefreshRemote);
 
 [searchInput, filterSource, filterUrgency, filterSentiment, filterTag].forEach(
   (input) => input.addEventListener("input", renderAll)
 );
 
-function init() {
+async function init() {
   updateSentimentDisplay(sentimentInput.value);
   updateSourceFilter(getSignals());
   renderAll();
   renderCommitments(getCommitments());
-  syncRemoteSignals();
-  syncRemoteCommitments();
+
+  await checkRemote();
+  if (remoteAvailable && modePreference !== "local") {
+    const refreshed = await refreshFromRemote();
+    if (!refreshed) {
+      dataMode = "local";
+    }
+  } else {
+    dataMode = "local";
+    setDataStatus();
+  }
 }
 
 init();

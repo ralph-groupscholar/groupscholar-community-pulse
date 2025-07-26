@@ -29,3 +29,8 @@
 - Added a Postgres-backed signals API with upsert support for shared Community Pulse data.
 - Wired the UI to sync signals to the backend while keeping local-first behavior.
 - Created a seed script and populated the production database with sample signals.
+
+## Iteration 6
+- Added cloud-sync data mode with status controls, remote refresh, and fallback to local storage.
+- Implemented Vercel serverless API endpoints and Postgres schema for signals/commitments with seed and import support.
+- Seeded the production Postgres schema so the dashboard ships with shared sample data.
