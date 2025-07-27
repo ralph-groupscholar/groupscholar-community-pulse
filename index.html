@@ -256,6 +256,42 @@
       </div>
     </section>
 
+    <section class="panel commitment-pulse">
+      <div class="panel-head">
+        <h2>Commitment pulse</h2>
+        <p class="hint">Ownership load, deadlines, and progress on follow-through.</p>
+      </div>
+      <div class="commitment-metrics">
+        <div>
+          <p class="label">Overdue</p>
+          <h3 id="commitment-overdue">0</h3>
+        </div>
+        <div>
+          <p class="label">Due in 7 days</p>
+          <h3 id="commitment-due-soon">0</h3>
+        </div>
+        <div>
+          <p class="label">Blocked</p>
+          <h3 id="commitment-blocked">0</h3>
+        </div>
+        <div>
+          <p class="label">Completion</p>
+          <h3 id="commitment-completion">0%</h3>
+        </div>
+      </div>
+      <div class="commitment-bars" id="commitment-status-bars"></div>
+      <div class="commitment-detail">
+        <div>
+          <p class="label">Owner load</p>
+          <div class="owner-rows" id="commitment-owner-rows"></div>
+        </div>
+        <div>
+          <p class="label">Next up</p>
+          <ul class="commitment-upcoming" id="commitment-upcoming"></ul>
+        </div>
+      </div>
+    </section>
+
     <section class="panel tracker">
       <h2>Action tracker</h2>
       <p class="hint">Turn signals into commitments with owners and due dates.</p>

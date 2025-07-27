@@ -48,6 +48,13 @@ const filterTag = document.getElementById("filter-tag");
 
 const trackerForm = document.getElementById("tracker-form");
 const trackerGrid = document.getElementById("tracker-grid");
+const commitmentOverdue = document.getElementById("commitment-overdue");
+const commitmentDueSoon = document.getElementById("commitment-due-soon");
+const commitmentBlocked = document.getElementById("commitment-blocked");
+const commitmentCompletion = document.getElementById("commitment-completion");
+const commitmentStatusBars = document.getElementById("commitment-status-bars");
+const commitmentOwnerRows = document.getElementById("commitment-owner-rows");
+const commitmentUpcoming = document.getElementById("commitment-upcoming");
 
 const dataModeStatus = document.getElementById("data-mode-status");
 const dataModeDetail = document.getElementById("data-mode-detail");
@@ -164,6 +171,7 @@ function setCommitments(commitments, persist = true) {
     storage.set(TRACKER_KEY, commitments);
   }
   renderCommitments(commitments);
+  renderCommitmentPulse(commitments);
 }
 
 function getSignals() {
@@ -172,6 +180,112 @@ function getSignals() {
 
 function getCommitments() {
   return commitmentStore;
+}
+
+function formatPercent(value) {
+  if (!Number.isFinite(value)) return "0%";
+  return `${Math.round(value)}%`;
+}
+
+function startOfToday() {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return today;
+}
+
+function renderCommitmentPulse(commitments) {
+  if (!commitmentOverdue) return;
+
+  const total = commitments.length;
+  const today = startOfToday();
+  const active = commitments.filter((item) => item.status !== "Complete");
+
+  const overdue = active.filter((item) => parseDate(item.due) < today);
+  const dueSoon = active.filter((item) => {
+    const diff = parseDate(item.due) - today;
+    return diff >= 0 && diff <= 7 * 24 * 60 * 60 * 1000;
+  });
+  const blocked = commitments.filter((item) => item.status === "Blocked");
+  const completeCount = commitments.filter((item) => item.status === "Complete");
+  const completionRate = total ? (completeCount.length / total) * 100 : 0;
+
+  commitmentOverdue.textContent = overdue.length;
+  commitmentDueSoon.textContent = dueSoon.length;
+  commitmentBlocked.textContent = blocked.length;
+  commitmentCompletion.textContent = formatPercent(completionRate);
+
+  const statusOrder = [
+    { label: "Planning", className: "" },
+    { label: "In progress", className: "progress" },
+    { label: "Blocked", className: "blocked" },
+    { label: "Complete", className: "" }
+  ];
+
+  commitmentStatusBars.innerHTML = "";
+  if (!total) {
+    commitmentStatusBars.innerHTML = "<p>No commitments yet.</p>";
+  } else {
+    statusOrder.forEach((status) => {
+      const count = commitments.filter((item) => item.status === status.label).length;
+      const percent = (count / total) * 100;
+      const bar = document.createElement("div");
+      bar.className = "commitment-bar";
+      bar.innerHTML = `
+        <div>
+          <strong>${status.label}</strong>
+          <span>${count} items</span>
+        </div>
+        <div class="commitment-bar-track">
+          <div class="commitment-bar-fill ${status.className}" style="width: ${percent}%"></div>
+        </div>
+      `;
+      commitmentStatusBars.appendChild(bar);
+    });
+  }
+
+  commitmentOwnerRows.innerHTML = "";
+  if (!active.length) {
+    commitmentOwnerRows.innerHTML = "<p>No active owners yet.</p>";
+  } else {
+    const ownerMap = active.reduce((acc, item) => {
+      const owner = item.owner || "Unassigned";
+      if (!acc[owner]) acc[owner] = [];
+      acc[owner].push(item);
+      return acc;
+    }, {});
+
+    Object.entries(ownerMap)
+      .map(([owner, items]) => ({
+        owner,
+        count: items.length,
+        nextDue: items
+          .map((item) => item.due)
+          .sort((a, b) => parseDate(a) - parseDate(b))[0]
+      }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 4)
+      .forEach((entry) => {
+        const row = document.createElement("div");
+        row.className = "owner-row";
+        row.innerHTML = `<span>${entry.owner}</span><span>${entry.count} · next ${entry.nextDue}</span>`;
+        commitmentOwnerRows.appendChild(row);
+      });
+  }
+
+  commitmentUpcoming.innerHTML = "";
+  const upcoming = active
+    .slice()
+    .sort((a, b) => parseDate(a.due) - parseDate(b.due))
+    .slice(0, 3);
+  if (!upcoming.length) {
+    commitmentUpcoming.innerHTML = "<li>All caught up.</li>";
+  } else {
+    upcoming.forEach((item) => {
+      const li = document.createElement("li");
+      li.innerHTML = `<strong>${item.commitment}</strong><span>${item.owner} · due ${item.due}</span>`;
+      commitmentUpcoming.appendChild(li);
+    });
+  }
 }
 
 function updateSentimentDisplay(value) {
@@ -1161,6 +1275,7 @@ async function init() {
   updateSourceFilter(getSignals());
   renderAll();
   renderCommitments(getCommitments());
+  renderCommitmentPulse(getCommitments());
 
   await checkRemote();
   if (remoteAvailable && modePreference !== "local") {

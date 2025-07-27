@@ -34,3 +34,8 @@
 - Added cloud-sync data mode with status controls, remote refresh, and fallback to local storage.
 - Implemented Vercel serverless API endpoints and Postgres schema for signals/commitments with seed and import support.
 - Seeded the production Postgres schema so the dashboard ships with shared sample data.
+
+## Iteration 7
+- Added a commitment pulse panel to track overdue items, upcoming deadlines, blocked work, and completion rate.
+- Built owner load and upcoming commitment views to surface follow-through risk.
+- Styled new commitment analytics bars and lists to match the existing dashboard system.
