@@ -39,3 +39,8 @@
 - Added a commitment pulse panel to track overdue items, upcoming deadlines, blocked work, and completion rate.
 - Built owner load and upcoming commitment views to surface follow-through risk.
 - Styled new commitment analytics bars and lists to match the existing dashboard system.
+
+## Iteration 7
+- Added the Topic Shifts panel with tag volume, sentiment, and urgency snapshots.
+- Implemented tag trend calculations for emerging vs cooling themes using week-over-week deltas.
+- Styled tag trend cards and insight lists to match the Community Pulse visual system.

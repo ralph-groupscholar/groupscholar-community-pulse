@@ -39,6 +39,8 @@ const healthRows = document.getElementById("health-rows");
 const alertList = document.getElementById("alert-list");
 const triageGrid = document.getElementById("triage-grid");
 const playbookOutput = document.getElementById("playbook-output");
+const tagGrid = document.getElementById("tag-grid");
+const tagInsights = document.getElementById("tag-insights");
 
 const searchInput = document.getElementById("search");
 const filterSource = document.getElementById("filter-source");
@@ -48,6 +50,16 @@ const filterTag = document.getElementById("filter-tag");
 
 const trackerForm = document.getElementById("tracker-form");
 const trackerGrid = document.getElementById("tracker-grid");
+const commitmentOverdue = document.getElementById("commitment-overdue");
+const commitmentDueSoon = document.getElementById("commitment-due-soon");
+const commitmentBlocked = document.getElementById("commitment-blocked");
+const commitmentCompletion = document.getElementById("commitment-completion");
+const commitmentStatusBars = document.getElementById("commitment-status-bars");
+const commitmentOwnerRows = document.getElementById("commitment-owner-rows");
+const commitmentUpcoming = document.getElementById("commitment-upcoming");
+const linkedSignalIdInput = document.getElementById("linked-signal-id");
+const linkedSignalText = document.getElementById("commitment-link-text");
+const clearLinkBtn = document.getElementById("clear-link");
 const commitmentOverdue = document.getElementById("commitment-overdue");
 const commitmentDueSoon = document.getElementById("commitment-due-soon");
 const commitmentBlocked = document.getElementById("commitment-blocked");
@@ -137,6 +149,7 @@ const sampleCommitments = [
     owner: "Finance Ops",
     due: "2026-02-12",
     status: "In progress",
+    signalId: "signal-1",
     createdAt: "2026-02-05"
   },
   {
@@ -145,6 +158,7 @@ const sampleCommitments = [
     owner: "Mentor Team",
     due: "2026-02-18",
     status: "Planning",
+    signalId: "signal-3",
     createdAt: "2026-02-02"
   }
 ];
@@ -180,6 +194,17 @@ function getSignals() {
 
 function getCommitments() {
   return commitmentStore;
+}
+
+function setLinkedSignal(signal) {
+  if (!linkedSignalIdInput || !linkedSignalText) return;
+  if (signal) {
+    linkedSignalIdInput.value = signal.id;
+    linkedSignalText.textContent = `${signal.title} · ${signal.source}`;
+    return;
+  }
+  linkedSignalIdInput.value = "";
+  linkedSignalText.textContent = "None linked";
 }
 
 function formatPercent(value) {
@@ -760,6 +785,113 @@ function renderPlaybook(signals) {
   `;
 }
 
+function getTagStats(signals) {
+  const stats = {};
+  signals.forEach((signal) => {
+    signal.tags.forEach((tag) => {
+      if (!stats[tag]) {
+        stats[tag] = { tag, count: 0, sentimentTotal: 0, urgent: 0 };
+      }
+      stats[tag].count += 1;
+      stats[tag].sentimentTotal += signal.sentiment;
+      if (signal.urgency === "high") {
+        stats[tag].urgent += 1;
+      }
+    });
+  });
+  return Object.values(stats).map((item) => ({
+    ...item,
+    avgSentiment: item.count
+      ? (item.sentimentTotal / item.count).toFixed(1)
+      : "—",
+    urgentShare: item.count
+      ? Math.round((item.urgent / item.count) * 100)
+      : 0
+  }));
+}
+
+function renderTagTrends(signals) {
+  if (!tagGrid || !tagInsights) return;
+
+  const recent14 = getRecentSignals(signals, 14);
+  if (!recent14.length) {
+    tagGrid.innerHTML = "<p class=\"hint\">No recent tag activity yet.</p>";
+    tagInsights.innerHTML = "";
+    return;
+  }
+
+  const topTags = getTagStats(recent14)
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 6);
+
+  tagGrid.innerHTML = "";
+  if (!topTags.length) {
+    tagGrid.innerHTML = "<p class=\"hint\">Tags haven’t been added to recent signals.</p>";
+    tagInsights.innerHTML = "";
+    return;
+  }
+  topTags.forEach((item) => {
+    const card = document.createElement("div");
+    card.className = "tag-card";
+    card.innerHTML = `
+      <h4>#${item.tag}</h4>
+      <p><strong>${item.count}</strong> signals · Avg sentiment ${item.avgSentiment}</p>
+      <div class="tag-meter">
+        <div class="tag-meter-track">
+          <span style="width:${item.urgentShare}%"></span>
+        </div>
+        <em>${item.urgentShare}% urgent</em>
+      </div>
+    `;
+    tagGrid.appendChild(card);
+  });
+
+  const recent7 = getSignalsInRange(signals, -1, 7);
+  const prior7 = getSignalsInRange(signals, 7, 14);
+  const recentStats = getTagStats(recent7).reduce((acc, item) => {
+    acc[item.tag] = item.count;
+    return acc;
+  }, {});
+  const priorStats = getTagStats(prior7).reduce((acc, item) => {
+    acc[item.tag] = item.count;
+    return acc;
+  }, {});
+
+  const movement = Array.from(
+    new Set([...Object.keys(recentStats), ...Object.keys(priorStats)])
+  ).map((tag) => ({
+    tag,
+    delta: (recentStats[tag] || 0) - (priorStats[tag] || 0)
+  }));
+
+  const emerging = movement
+    .filter((item) => item.delta > 0)
+    .sort((a, b) => b.delta - a.delta)
+    .slice(0, 3);
+  const cooling = movement
+    .filter((item) => item.delta < 0)
+    .sort((a, b) => a.delta - b.delta)
+    .slice(0, 3);
+
+  const emergingList = emerging.length
+    ? emerging.map((item) => `<li>#${item.tag} (+${item.delta})</li>`).join("")
+    : "<li>No emerging tags this week.</li>";
+  const coolingList = cooling.length
+    ? cooling.map((item) => `<li>#${item.tag} (${item.delta})</li>`).join("")
+    : "<li>No cooling tags this week.</li>";
+
+  tagInsights.innerHTML = `
+    <div>
+      <p class="label">Emerging</p>
+      <ul>${emergingList}</ul>
+    </div>
+    <div>
+      <p class="label">Cooling</p>
+      <ul>${coolingList}</ul>
+    </div>
+  `;
+}
+
 function renderSignalCard(signal) {
   const card = document.createElement("article");
   card.className = "card";
@@ -870,6 +1002,8 @@ function renderCommitments(commitments) {
     return;
   }
 
+  const signalMap = new Map(getSignals().map((signal) => [signal.id, signal]));
+
   commitments.forEach((item) => {
     const card = document.createElement("div");
     card.className = "tracker-card";
@@ -903,8 +1037,14 @@ function renderCommitments(commitments) {
 
     header.innerHTML = `<span>${item.owner}</span><span>Due ${item.due}</span>`;
 
+    const linkedSignal = item.signalId ? signalMap.get(item.signalId) : null;
+    const linkedMarkup = linkedSignal
+      ? `<div class="tracker-link">Linked · ${linkedSignal.title}</div>`
+      : "";
+
     card.innerHTML = `
       <strong>${item.commitment}</strong>
+      ${linkedMarkup}
     `;
     card.appendChild(header);
     card.appendChild(statusSelect);
@@ -918,6 +1058,7 @@ function renderAll() {
   const filtered = applyFilters(signals);
   updateMetrics(signals);
   updateMomentum(signals);
+  renderTagTrends(signals);
   renderListeningHealth(signals);
   renderTriage(signals);
   renderPlaybook(signals);

@@ -81,6 +81,15 @@
       <div class="mini-bars" id="source-mix"></div>
     </section>
 
+    <section class="panel tag-trends">
+      <div class="panel-head">
+        <h2>Topic shifts</h2>
+        <p class="hint">Top tags, sentiment, and week-over-week movement.</p>
+      </div>
+      <div class="tag-grid" id="tag-grid"></div>
+      <div class="tag-insights" id="tag-insights"></div>
+    </section>
+
     <section class="panel listening">
       <div class="panel-head">
         <h2>Listening health</h2>
@@ -297,6 +306,14 @@
       <p class="hint">Turn signals into commitments with owners and due dates.</p>
       <div class="tracker-grid" id="tracker-grid"></div>
       <form id="tracker-form">
+        <div class="link-status">
+          <p class="label">Linked signal</p>
+          <div class="link-pill">
+            <span id="commitment-link-text">None linked</span>
+            <button type="button" class="ghost small" id="clear-link">Clear</button>
+          </div>
+          <input type="hidden" id="linked-signal-id" name="linkedSignalId" value="" />
+        </div>
         <div class="field-row">
           <label>
             Commitment

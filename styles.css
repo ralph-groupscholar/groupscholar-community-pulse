@@ -241,6 +241,74 @@ h1 {
   margin: 16px 0;
 }
 
+.tag-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.tag-card {
+  padding: 14px;
+  border-radius: 16px;
+  background: white;
+  border: 1px solid var(--line);
+  display: grid;
+  gap: 8px;
+}
+
+.tag-card h4 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.tag-card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.tag-meter {
+  display: grid;
+  gap: 6px;
+}
+
+.tag-meter-track {
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(18, 22, 39, 0.08);
+  overflow: hidden;
+}
+
+.tag-meter-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+}
+
+.tag-meter em {
+  display: block;
+  margin-top: 8px;
+  font-style: normal;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.tag-insights {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.tag-insights ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  color: var(--muted);
+  display: grid;
+  gap: 6px;
+}
+
 .commitment-metrics {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
@@ -528,6 +596,12 @@ button.ghost,
   border: 1px solid var(--line);
 }
 
+button.small {
+  padding: 6px 12px;
+  font-size: 0.75rem;
+  border-radius: 10px;
+}
+
 button:disabled {
   opacity: 0.55;
   cursor: not-allowed;
@@ -586,6 +660,12 @@ button:disabled {
   color: var(--muted);
 }
 
+.card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .badges {
   display: flex;
   flex-wrap: wrap;
@@ -636,11 +716,38 @@ button:disabled {
   gap: 8px;
 }
 
+.tracker-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  background: rgba(31, 159, 162, 0.12);
+  color: #0e6668;
+}
+
 .tracker-meta {
   display: flex;
   justify-content: space-between;
   color: var(--muted);
   font-size: 0.85rem;
+}
+
+.link-status {
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(18, 22, 39, 0.04);
+  border: 1px solid var(--line);
+}
+
+.link-pill {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
 }
 
 .footer {
