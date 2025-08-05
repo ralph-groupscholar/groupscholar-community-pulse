@@ -60,13 +60,11 @@ const commitmentUpcoming = document.getElementById("commitment-upcoming");
 const linkedSignalIdInput = document.getElementById("linked-signal-id");
 const linkedSignalText = document.getElementById("commitment-link-text");
 const clearLinkBtn = document.getElementById("clear-link");
-const commitmentOverdue = document.getElementById("commitment-overdue");
-const commitmentDueSoon = document.getElementById("commitment-due-soon");
-const commitmentBlocked = document.getElementById("commitment-blocked");
-const commitmentCompletion = document.getElementById("commitment-completion");
-const commitmentStatusBars = document.getElementById("commitment-status-bars");
-const commitmentOwnerRows = document.getElementById("commitment-owner-rows");
-const commitmentUpcoming = document.getElementById("commitment-upcoming");
+const responseCoverage = document.getElementById("response-coverage");
+const responseLag = document.getElementById("response-lag");
+const responseRisk = document.getElementById("response-risk");
+const responseUrgent = document.getElementById("response-urgent");
+const responseList = document.getElementById("response-list");
 
 const dataModeStatus = document.getElementById("data-mode-status");
 const dataModeDetail = document.getElementById("data-mode-detail");
@@ -186,6 +184,7 @@ function setCommitments(commitments, persist = true) {
   }
   renderCommitments(commitments);
   renderCommitmentPulse(commitments);
+  renderResponseSla(getSignals(), commitments);
 }
 
 function getSignals() {
@@ -313,6 +312,101 @@ function renderCommitmentPulse(commitments) {
   }
 }
 
+function renderResponseSla(signals, commitments) {
+  if (!responseCoverage || !responseLag || !responseRisk || !responseUrgent || !responseList) {
+    return;
+  }
+
+  if (!signals.length) {
+    responseCoverage.textContent = "0%";
+    responseLag.textContent = "—";
+    responseRisk.textContent = "0";
+    responseUrgent.textContent = "0";
+    responseList.innerHTML = "<p>No signals yet.</p>";
+    return;
+  }
+
+  const commitmentMap = commitments.reduce((acc, item) => {
+    if (!item.signalId) return acc;
+    if (!acc[item.signalId]) acc[item.signalId] = [];
+    acc[item.signalId].push(item);
+    return acc;
+  }, {});
+
+  const now = new Date();
+  const responseStats = signals.map((signal) => {
+    const signalDate = parseDate(signal.createdAt);
+    const linked = commitmentMap[signal.id] || [];
+    const firstCommitment = linked
+      .slice()
+      .sort((a, b) => parseDate(a.createdAt) - parseDate(b.createdAt))[0];
+    const responseDays = firstCommitment
+      ? Math.max(0, getDayDiff(signalDate, parseDate(firstCommitment.createdAt)))
+      : null;
+    const daysOpen = Math.max(0, getDayDiff(signalDate, now));
+    return {
+      signal,
+      responseDays,
+      daysOpen,
+      hasResponse: responseDays !== null
+    };
+  });
+
+  const responded = responseStats.filter((item) => item.hasResponse);
+  const coverage = Math.round((responded.length / signals.length) * 100);
+  const avgResponse = responded.length
+    ? (
+        responded.reduce((sum, item) => sum + item.responseDays, 0) /
+        responded.length
+      ).toFixed(1)
+    : "—";
+  const riskSignals = responseStats.filter(
+    (item) => !item.hasResponse && item.daysOpen >= 3
+  );
+  const urgentSignals = responseStats.filter(
+    (item) =>
+      !item.hasResponse &&
+      item.signal.urgency === "high" &&
+      item.daysOpen >= 1
+  );
+
+  responseCoverage.textContent = `${coverage}%`;
+  responseLag.textContent = responded.length ? `${avgResponse}d` : "—";
+  responseRisk.textContent = `${riskSignals.length}`;
+  responseUrgent.textContent = `${urgentSignals.length}`;
+
+  const spotlight = responseStats
+    .filter((item) => !item.hasResponse || item.responseDays >= 3)
+    .sort((a, b) => {
+      if (a.hasResponse !== b.hasResponse) return a.hasResponse ? 1 : -1;
+      return b.daysOpen - a.daysOpen;
+    })
+    .slice(0, 4);
+
+  if (!spotlight.length) {
+    responseList.innerHTML = "<p>All signals are covered within the SLA window.</p>";
+    return;
+  }
+
+  responseList.innerHTML = "";
+  spotlight.forEach((item) => {
+    const row = document.createElement("div");
+    row.className = "sla-row";
+    const statusText = item.hasResponse
+      ? `Responded in ${item.responseDays}d`
+      : `Unclaimed · ${item.daysOpen}d`;
+    const statusClass = item.hasResponse ? "sla-pill" : "sla-pill risk";
+    row.innerHTML = `
+      <div>
+        <strong>${item.signal.title}</strong>
+        <p>${item.signal.source} · ${item.signal.createdAt}</p>
+      </div>
+      <span class="${statusClass}">${statusText}</span>
+    `;
+    responseList.appendChild(row);
+  });
+}
+
 function updateSentimentDisplay(value) {
   const label = sentimentLabels[value] || "Neutral";
   sentimentDisplay.textContent = `${value} · ${label}`;
@@ -334,6 +428,10 @@ function getDaysAgo(dateString) {
   const now = new Date();
   const diff = now - date;
   return Math.floor(diff / (24 * 60 * 60 * 1000));
+}
+
+function getDayDiff(startDate, endDate) {
+  return Math.floor((endDate - startDate) / (24 * 60 * 60 * 1000));
 }
 
 function getSignalsInRange(signals, startDaysAgoExclusive, endDaysAgoInclusive) {
@@ -934,9 +1032,41 @@ function renderSignalCard(signal) {
     <p>${signal.notes}</p>
   `;
 
+  const actions = document.createElement("div");
+  actions.className = "card-actions";
+
+  const followUpBtn = document.createElement("button");
+  followUpBtn.type = "button";
+  followUpBtn.className = "ghost small";
+  followUpBtn.textContent = "Create commitment";
+  followUpBtn.addEventListener("click", () => {
+    const commitmentField = document.getElementById("commitment");
+    const ownerField = document.getElementById("owner");
+    const dueField = document.getElementById("due");
+    const statusField = document.getElementById("status");
+    if (commitmentField) {
+      commitmentField.value = signal.title;
+    }
+    if (ownerField && !ownerField.value) {
+      ownerField.value = "";
+    }
+    if (statusField) {
+      statusField.value = "Planning";
+    }
+    if (dueField && !dueField.value) {
+      const suggested = new Date();
+      suggested.setDate(suggested.getDate() + 7);
+      dueField.value = suggested.toISOString().slice(0, 10);
+    }
+    setLinkedSignal(signal);
+    trackerForm.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+
+  actions.appendChild(followUpBtn);
   card.appendChild(meta);
   card.appendChild(badges);
   card.appendChild(tagWrap);
+  card.appendChild(actions);
 
   return card;
 }
@@ -1062,6 +1192,7 @@ function renderAll() {
   renderListeningHealth(signals);
   renderTriage(signals);
   renderPlaybook(signals);
+  renderResponseSla(signals, getCommitments());
   renderFeed(filtered);
 }
 
@@ -1275,6 +1406,7 @@ async function handleCommitmentSubmit(event) {
     owner: formData.get("owner").toString().trim(),
     due: formData.get("due").toString(),
     status: formData.get("status").toString(),
+    signalId: formData.get("linkedSignalId").toString(),
     createdAt: new Date().toISOString().slice(0, 10)
   };
 
@@ -1290,6 +1422,7 @@ async function handleCommitmentSubmit(event) {
   }
 
   trackerForm.reset();
+  setLinkedSignal(null);
 }
 
 async function handleSeed() {
@@ -1406,6 +1539,7 @@ importInput.addEventListener("change", handleImport);
 resetFiltersBtn.addEventListener("click", handleResetFilters);
 dataModeToggle.addEventListener("click", handleToggleMode);
 dataRefreshBtn.addEventListener("click", handleRefreshRemote);
+clearLinkBtn.addEventListener("click", () => setLinkedSignal(null));
 
 [searchInput, filterSource, filterUrgency, filterSentiment, filterTag].forEach(
   (input) => input.addEventListener("input", renderAll)
@@ -1413,6 +1547,7 @@ dataRefreshBtn.addEventListener("click", handleRefreshRemote);
 
 async function init() {
   updateSentimentDisplay(sentimentInput.value);
+  setLinkedSignal(null);
   updateSourceFilter(getSignals());
   renderAll();
   renderCommitments(getCommitments());

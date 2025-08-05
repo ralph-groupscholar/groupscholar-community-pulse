@@ -265,6 +265,32 @@
       </div>
     </section>
 
+    <section class="panel sla">
+      <div class="panel-head">
+        <h2>Response SLA</h2>
+        <p class="hint">Time-to-commitment coverage for incoming signals.</p>
+      </div>
+      <div class="sla-metrics">
+        <div>
+          <p class="label">Coverage</p>
+          <h3 id="response-coverage">0%</h3>
+        </div>
+        <div>
+          <p class="label">Avg response</p>
+          <h3 id="response-lag">—</h3>
+        </div>
+        <div>
+          <p class="label">SLA risk</p>
+          <h3 id="response-risk">0</h3>
+        </div>
+        <div>
+          <p class="label">Urgent open</p>
+          <h3 id="response-urgent">0</h3>
+        </div>
+      </div>
+      <div class="sla-list" id="response-list"></div>
+    </section>
+
     <section class="panel commitment-pulse">
       <div class="panel-head">
         <h2>Commitment pulse</h2>
@@ -299,6 +325,32 @@
           <ul class="commitment-upcoming" id="commitment-upcoming"></ul>
         </div>
       </div>
+    </section>
+
+    <section class="panel response-sla">
+      <div class="panel-head">
+        <h2>Response SLA</h2>
+        <p class="hint">Track how fast signals get an owner and first response.</p>
+      </div>
+      <div class="sla-metrics">
+        <div>
+          <p class="label">Coverage</p>
+          <h3 id="response-coverage">0%</h3>
+        </div>
+        <div>
+          <p class="label">Avg first response</p>
+          <h3 id="response-lag">—</h3>
+        </div>
+        <div>
+          <p class="label">At-risk signals</p>
+          <h3 id="response-risk">0</h3>
+        </div>
+        <div>
+          <p class="label">Urgent unclaimed</p>
+          <h3 id="response-urgent">0</h3>
+        </div>
+      </div>
+      <div class="sla-list" id="response-list"></div>
     </section>
 
     <section class="panel tracker">

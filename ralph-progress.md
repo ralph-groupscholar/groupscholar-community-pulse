@@ -44,3 +44,13 @@
 - Added the Topic Shifts panel with tag volume, sentiment, and urgency snapshots.
 - Implemented tag trend calculations for emerging vs cooling themes using week-over-week deltas.
 - Styled tag trend cards and insight lists to match the Community Pulse visual system.
+
+## Iteration 8
+- Added a Response SLA panel to track coverage, average first response, and at-risk signals.
+- Built SLA spotlight rows for unclaimed or slow-response signals tied to commitments.
+- Fixed duplicate commitment DOM bindings and refreshed the UI styles for SLA status pills.
+
+## Iteration 9
+- Wired the Response SLA panel into the dashboard layout with coverage, lag, and risk metrics.
+- Added SLA list styling for on-track vs at-risk response pills.
+- Confirmed the Response SLA renderer runs alongside commitment updates.
