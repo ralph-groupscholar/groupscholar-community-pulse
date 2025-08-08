@@ -108,12 +108,96 @@
       </div>
     </section>
 
+    <section class="panel location">
+      <div class="panel-head">
+        <h2>Location pulse</h2>
+        <p class="hint">Where signals are clustering and where sentiment is cooling.</p>
+      </div>
+      <div class="health-summary" id="location-summary"></div>
+      <div class="location-table">
+        <div class="location-row health-head">
+          <span>Location</span>
+          <span>Last signal</span>
+          <span>Volume (14d)</span>
+          <span>Sentiment</span>
+          <span>Urgency</span>
+          <span>Status</span>
+        </div>
+        <div id="location-rows"></div>
+      </div>
+      <div class="location-insights" id="location-insights"></div>
+    </section>
+
     <section class="panel alerts">
       <div class="panel-head">
         <h2>Alert desk</h2>
         <p class="hint">Anomalies that need a human follow-up.</p>
       </div>
       <ul class="alert-list" id="alert-list"></ul>
+    </section>
+
+    <section class="panel aging">
+      <div class="panel-head">
+        <h2>Signal aging</h2>
+        <p class="hint">Track how long signals stay open and unowned.</p>
+      </div>
+      <div class="aging-summary">
+        <div class="summary-card">
+          <span class="label">Avg age</span>
+          <strong id="aging-average">0d</strong>
+        </div>
+        <div class="summary-card">
+          <span class="label">Oldest signal</span>
+          <strong id="aging-oldest">0d</strong>
+        </div>
+        <div class="summary-card">
+          <span class="label">Unassigned 7d+</span>
+          <strong id="aging-unassigned">0</strong>
+        </div>
+      </div>
+      <div class="aging-bars" id="aging-bars"></div>
+      <div class="aging-list" id="aging-list"></div>
+    </section>
+
+    <section class="panel loop">
+      <div class="panel-head">
+        <h2>Follow-through loop</h2>
+        <p class="hint">How quickly signals convert into owned commitments.</p>
+      </div>
+      <div class="health-summary" id="loop-summary"></div>
+      <div class="loop-table">
+        <div class="loop-row health-head">
+          <span>Source</span>
+          <span>Coverage</span>
+          <span>Avg lag</span>
+          <span>Sentiment</span>
+          <span>Status</span>
+        </div>
+        <div id="loop-rows"></div>
+      </div>
+      <div class="loop-insights" id="loop-insights"></div>
+    </section>
+
+    <section class="panel escalation">
+      <div class="panel-head">
+        <h2>Escalation radar</h2>
+        <p class="hint">High-risk signals needing an owner or deadline.</p>
+      </div>
+      <div class="escalation-summary">
+        <div class="summary-card">
+          <span class="label">High-risk signals</span>
+          <strong id="escalation-total">0</strong>
+        </div>
+        <div class="summary-card">
+          <span class="label">Unassigned</span>
+          <strong id="escalation-unassigned">0</strong>
+        </div>
+        <div class="summary-card">
+          <span class="label">Overdue owners</span>
+          <strong id="escalation-overdue">0</strong>
+        </div>
+      </div>
+      <div class="escalation-list" id="escalation-list"></div>
     </section>
 
     <section class="panel entry">
@@ -254,6 +338,20 @@
       <p class="hint">Summaries last 7 days of signals. Click generate to refresh.</p>
       <div id="digest-output" class="digest-body">
         <p>No digest generated yet.</p>
+      </div>
+    </section>
+
+    <section class="panel brief">
+      <div class="panel-head">
+        <h2>Pulse brief</h2>
+        <p class="hint">One-click summary you can drop into weekly updates.</p>
+      </div>
+      <div class="brief-actions">
+        <button type="button" class="ghost" id="brief-btn">Generate brief</button>
+        <button type="button" class="ghost" id="brief-copy" disabled>Copy brief</button>
+      </div>
+      <div id="brief-output" class="brief-body">
+        <p>No brief generated yet.</p>
       </div>
     </section>
 

@@ -54,3 +54,29 @@
 - Wired the Response SLA panel into the dashboard layout with coverage, lag, and risk metrics.
 - Added SLA list styling for on-track vs at-risk response pills.
 - Confirmed the Response SLA renderer runs alongside commitment updates.
+
+## Iteration 110
+- Added cloud persistence for linked signal IDs on commitments so Response SLA and tracker links work in shared mode.
+- Expanded the database seed/migration script to create commitments with signal links and ensure required columns exist.
+- Updated import/seed pipelines to keep signal-link metadata consistent across local and cloud sync.
+- Attempted a Vercel production deploy, but hit the daily free deployment limit.
+
+## Iteration 111
+- Added an Escalation Radar panel to highlight high-risk signals, unassigned follow-ups, and overdue owners.
+- Implemented signal-to-commitment matching for escalation status and surfaced ranked at-risk items.
+- Styled escalation summary cards and signal rows to align with the Community Pulse dashboard system.
+
+## Iteration 112
+- Added a Location Pulse panel to summarize regional activity, urgency hotspots, and cooling locations.
+- Implemented location trend analytics with week-over-week growth, sentiment watch, and urgency ratios.
+- Styled location tables and insight cards to match the existing dashboard layout.
+
+## Iteration 112
+- Added a Pulse Brief panel that summarizes weekly signal volume, sentiment, SLA coverage, and commitment risk.
+- Implemented copy-ready brief output with clipboard support for weekly updates.
+- Refactored Response SLA calculations into shared stats helpers to keep brief and SLA views aligned.
+
+## Iteration 113
+- Added a Follow-through Loop panel to track signal-to-commitment coverage, lag, and completion health.
+- Implemented per-source loop stats with coverage %, average lag, sentiment, and status tags plus insight callouts.
+- Styled loop summary cards and insights to match the Community Pulse dashboard system.

@@ -21,6 +21,9 @@ const seedBtn = document.getElementById("seed-btn");
 const signalFeed = document.getElementById("signal-feed");
 const digestBtn = document.getElementById("digest-btn");
 const digestOutput = document.getElementById("digest-output");
+const briefBtn = document.getElementById("brief-btn");
+const briefCopyBtn = document.getElementById("brief-copy");
+const briefOutput = document.getElementById("brief-output");
 const exportBtn = document.getElementById("export-btn");
 const importInput = document.getElementById("import-input");
 const resetFiltersBtn = document.getElementById("reset-filters");
@@ -37,6 +40,21 @@ const sourceMix = document.getElementById("source-mix");
 const healthSummary = document.getElementById("health-summary");
 const healthRows = document.getElementById("health-rows");
 const alertList = document.getElementById("alert-list");
+const agingAverage = document.getElementById("aging-average");
+const agingOldest = document.getElementById("aging-oldest");
+const agingUnassigned = document.getElementById("aging-unassigned");
+const agingBars = document.getElementById("aging-bars");
+const agingList = document.getElementById("aging-list");
+const loopSummary = document.getElementById("loop-summary");
+const loopRows = document.getElementById("loop-rows");
+const loopInsights = document.getElementById("loop-insights");
+const locationSummary = document.getElementById("location-summary");
+const locationRows = document.getElementById("location-rows");
+const locationInsights = document.getElementById("location-insights");
+const escalationTotal = document.getElementById("escalation-total");
+const escalationUnassigned = document.getElementById("escalation-unassigned");
+const escalationOverdue = document.getElementById("escalation-overdue");
+const escalationList = document.getElementById("escalation-list");
 const triageGrid = document.getElementById("triage-grid");
 const playbookOutput = document.getElementById("playbook-output");
 const tagGrid = document.getElementById("tag-grid");
@@ -167,6 +185,7 @@ let remoteAvailable = false;
 let dataMode = "local";
 let lastSync = null;
 let modePreference = storage.get(MODE_KEY, "auto");
+let latestBrief = "";
 
 function setSignals(signals, persist = true) {
   signalStore = signals;
@@ -185,6 +204,8 @@ function setCommitments(commitments, persist = true) {
   renderCommitments(commitments);
   renderCommitmentPulse(commitments);
   renderResponseSla(getSignals(), commitments);
+  renderEscalationRadar(getSignals(), commitments);
+  renderLoopHealth(getSignals(), commitments);
 }
 
 function getSignals() {
@@ -312,20 +333,7 @@ function renderCommitmentPulse(commitments) {
   }
 }
 
-function renderResponseSla(signals, commitments) {
-  if (!responseCoverage || !responseLag || !responseRisk || !responseUrgent || !responseList) {
-    return;
-  }
-
-  if (!signals.length) {
-    responseCoverage.textContent = "0%";
-    responseLag.textContent = "—";
-    responseRisk.textContent = "0";
-    responseUrgent.textContent = "0";
-    responseList.innerHTML = "<p>No signals yet.</p>";
-    return;
-  }
-
+function getResponseSlaStats(signals, commitments) {
   const commitmentMap = commitments.reduce((acc, item) => {
     if (!item.signalId) return acc;
     if (!acc[item.signalId]) acc[item.signalId] = [];
@@ -353,7 +361,9 @@ function renderResponseSla(signals, commitments) {
   });
 
   const responded = responseStats.filter((item) => item.hasResponse);
-  const coverage = Math.round((responded.length / signals.length) * 100);
+  const coverage = signals.length
+    ? Math.round((responded.length / signals.length) * 100)
+    : 0;
   const avgResponse = responded.length
     ? (
         responded.reduce((sum, item) => sum + item.responseDays, 0) /
@@ -369,12 +379,6 @@ function renderResponseSla(signals, commitments) {
       item.signal.urgency === "high" &&
       item.daysOpen >= 1
   );
-
-  responseCoverage.textContent = `${coverage}%`;
-  responseLag.textContent = responded.length ? `${avgResponse}d` : "—";
-  responseRisk.textContent = `${riskSignals.length}`;
-  responseUrgent.textContent = `${urgentSignals.length}`;
-
   const spotlight = responseStats
     .filter((item) => !item.hasResponse || item.responseDays >= 3)
     .sort((a, b) => {
@@ -382,6 +386,44 @@ function renderResponseSla(signals, commitments) {
       return b.daysOpen - a.daysOpen;
     })
     .slice(0, 4);
+
+  return {
+    coverage,
+    avgResponse,
+    riskSignals,
+    urgentSignals,
+    spotlight,
+    respondedCount: responded.length
+  };
+}
+
+function renderResponseSla(signals, commitments) {
+  if (!responseCoverage || !responseLag || !responseRisk || !responseUrgent || !responseList) {
+    return;
+  }
+
+  if (!signals.length) {
+    responseCoverage.textContent = "0%";
+    responseLag.textContent = "—";
+    responseRisk.textContent = "0";
+    responseUrgent.textContent = "0";
+    responseList.innerHTML = "<p>No signals yet.</p>";
+    return;
+  }
+
+  const {
+    coverage,
+    avgResponse,
+    riskSignals,
+    urgentSignals,
+    spotlight,
+    respondedCount
+  } = getResponseSlaStats(signals, commitments);
+
+  responseCoverage.textContent = `${coverage}%`;
+  responseLag.textContent = respondedCount ? `${avgResponse}d` : "—";
+  responseRisk.textContent = `${riskSignals.length}`;
+  responseUrgent.textContent = `${urgentSignals.length}`;
 
   if (!spotlight.length) {
     responseList.innerHTML = "<p>All signals are covered within the SLA window.</p>";
@@ -405,6 +447,116 @@ function renderResponseSla(signals, commitments) {
     `;
     responseList.appendChild(row);
   });
+}
+
+function buildBriefText(lines) {
+  return lines.filter(Boolean).join("\n");
+}
+
+function renderBrief(signals, commitments) {
+  if (!briefOutput || !briefCopyBtn) return;
+
+  if (!signals.length) {
+    briefOutput.innerHTML = "<p>No signals yet.</p>";
+    briefCopyBtn.disabled = true;
+    latestBrief = "";
+    return;
+  }
+
+  const recent = signals.filter((signal) => isWithinDays(signal.createdAt, 7));
+  const urgent = recent.filter((signal) => signal.urgency === "high");
+  const avgSentiment = recent.length
+    ? (
+        recent.reduce((sum, signal) => sum + signal.sentiment, 0) / recent.length
+      ).toFixed(1)
+    : "0.0";
+  const topTag = getTopTag(recent);
+
+  const today = startOfToday();
+  const activeCommitments = commitments.filter((item) => item.status !== "Complete");
+  const overdue = activeCommitments.filter((item) => parseDate(item.due) < today);
+  const dueSoon = activeCommitments.filter((item) => {
+    const due = parseDate(item.due);
+    const diff = getDayDiff(today, due);
+    return diff >= 0 && diff <= 7;
+  });
+  const blocked = activeCommitments.filter((item) => item.status === "Blocked");
+
+  const {
+    coverage,
+    avgResponse,
+    riskSignals,
+    urgentSignals,
+    spotlight
+  } = getResponseSlaStats(signals, commitments);
+
+  const prioritySignals = (urgentSignals.length ? urgentSignals : spotlight)
+    .slice(0, 3)
+    .map((item) => item.signal);
+
+  briefOutput.innerHTML = `
+    <p><strong>Community Pulse Brief</strong></p>
+    <p>${recent.length} signals in the last 7 days · avg sentiment ${avgSentiment} · ${urgent.length} urgent.</p>
+    <ul>
+      <li>Top tag: ${topTag}</li>
+      <li>Response coverage: ${coverage}% (avg ${avgResponse}d) · ${riskSignals.length} at-risk</li>
+      <li>Commitments: ${overdue.length} overdue · ${dueSoon.length} due in 7 days · ${blocked.length} blocked</li>
+    </ul>
+    <div>
+      <p class="label">Priority follow-ups</p>
+      ${
+        prioritySignals.length
+          ? `<ul>${prioritySignals
+              .map(
+                (signal) =>
+                  `<li>${signal.title} (${signal.source}, ${signal.createdAt})</li>`
+              )
+              .join("")}</ul>`
+          : "<p class=\"hint\">No priority follow-ups identified.</p>"
+      }
+    </div>
+  `;
+
+  const lines = [
+    "Community Pulse Brief",
+    `Signals (7d): ${recent.length} · Avg sentiment: ${avgSentiment} · Urgent: ${urgent.length}`,
+    `Top tag: ${topTag}`,
+    `Response coverage: ${coverage}% (avg ${avgResponse}d) · SLA risk: ${riskSignals.length}`,
+    `Commitments: ${overdue.length} overdue · ${dueSoon.length} due in 7 days · ${blocked.length} blocked`,
+    prioritySignals.length
+      ? "Priority follow-ups:\n" +
+        prioritySignals
+          .map(
+            (signal) => `- ${signal.title} (${signal.source}, ${signal.createdAt})`
+          )
+          .join("\n")
+      : "Priority follow-ups: none"
+  ];
+
+  latestBrief = buildBriefText(lines);
+  briefCopyBtn.disabled = false;
+}
+
+async function handleCopyBrief() {
+  if (!latestBrief) return;
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(latestBrief);
+    } else {
+      const temp = document.createElement("textarea");
+      temp.value = latestBrief;
+      document.body.appendChild(temp);
+      temp.select();
+      document.execCommand("copy");
+      document.body.removeChild(temp);
+    }
+    briefCopyBtn.textContent = "Copied";
+    setTimeout(() => {
+      briefCopyBtn.textContent = "Copy brief";
+    }, 1500);
+  } catch (error) {
+    console.error("Failed to copy brief", error);
+  }
 }
 
 function updateSentimentDisplay(value) {
@@ -697,6 +849,372 @@ function renderListeningHealth(signals) {
   renderAlertDesk(stats);
 }
 
+function renderLoopHealth(signals, commitments) {
+  if (!loopSummary || !loopRows || !loopInsights) return;
+
+  if (!signals.length) {
+    loopSummary.innerHTML = "<p>No signals yet.</p>";
+    loopRows.innerHTML = "";
+    loopInsights.innerHTML =
+      "<p class=\"hint\">Capture signals and commitments to see follow-through health.</p>";
+    return;
+  }
+
+  const earliestCommitmentBySignal = new Map();
+  commitments.forEach((commitment) => {
+    if (!commitment.signalId || !commitment.createdAt) return;
+    const current = earliestCommitmentBySignal.get(commitment.signalId);
+    if (!current || parseDate(commitment.createdAt) < parseDate(current)) {
+      earliestCommitmentBySignal.set(commitment.signalId, commitment.createdAt);
+    }
+  });
+
+  const linkedSignals = signals.filter((signal) =>
+    earliestCommitmentBySignal.has(signal.id)
+  );
+  const coverage = Math.round((linkedSignals.length / signals.length) * 100);
+  const completed = commitments.filter((item) => item.status === "Complete")
+    .length;
+  const openCommitments = commitments.filter(
+    (item) => item.status !== "Complete"
+  ).length;
+  const completionRate = commitments.length
+    ? Math.round((completed / commitments.length) * 100)
+    : 0;
+
+  let lagSum = 0;
+  let lagCount = 0;
+  linkedSignals.forEach((signal) => {
+    const commitmentDate = earliestCommitmentBySignal.get(signal.id);
+    if (!commitmentDate) return;
+    const diff = getDayDiff(
+      parseDate(signal.createdAt),
+      parseDate(commitmentDate)
+    );
+    if (Number.isFinite(diff)) {
+      lagSum += Math.max(0, diff);
+      lagCount += 1;
+    }
+  });
+  const avgLag = lagCount ? (lagSum / lagCount).toFixed(1) : "—";
+
+  loopSummary.innerHTML = `
+    <div class="summary-card">
+      <span class="label">Signals with follow-up</span>
+      <strong>${coverage}%</strong>
+    </div>
+    <div class="summary-card">
+      <span class="label">Avg follow-up lag</span>
+      <strong>${avgLag}${avgLag === "—" ? "" : "d"}</strong>
+    </div>
+    <div class="summary-card">
+      <span class="label">Open commitments</span>
+      <strong>${openCommitments}</strong>
+    </div>
+    <div class="summary-card">
+      <span class="label">Completion rate</span>
+      <strong>${completionRate}%</strong>
+    </div>
+  `;
+
+  const sourceStats = {};
+  signals.forEach((signal) => {
+    const source = signal.source || "Unknown";
+    if (!sourceStats[source]) {
+      sourceStats[source] = {
+        source,
+        total: 0,
+        linked: 0,
+        sentimentSum: 0,
+        lagSum: 0,
+        lagCount: 0,
+        lastDate: signal.createdAt
+      };
+    }
+    const entry = sourceStats[source];
+    entry.total += 1;
+    entry.sentimentSum += signal.sentiment;
+    if (parseDate(signal.createdAt) > parseDate(entry.lastDate)) {
+      entry.lastDate = signal.createdAt;
+    }
+    const commitmentDate = earliestCommitmentBySignal.get(signal.id);
+    if (commitmentDate) {
+      entry.linked += 1;
+      const diff = getDayDiff(
+        parseDate(signal.createdAt),
+        parseDate(commitmentDate)
+      );
+      if (Number.isFinite(diff)) {
+        entry.lagSum += Math.max(0, diff);
+        entry.lagCount += 1;
+      }
+    }
+  });
+
+  const rows = Object.values(sourceStats).map((entry) => {
+    const coveragePercent = entry.total
+      ? Math.round((entry.linked / entry.total) * 100)
+      : 0;
+    const avgSentiment = entry.total
+      ? (entry.sentimentSum / entry.total).toFixed(1)
+      : "—";
+    const avgLagDays = entry.lagCount
+      ? (entry.lagSum / entry.lagCount).toFixed(1)
+      : "—";
+    const lastDays = entry.lastDate ? getDaysAgo(entry.lastDate) : null;
+    let status = "No data";
+    if (entry.total) {
+      if (lastDays !== null && lastDays > 21) status = "Silent";
+      else if (coveragePercent < 40) status = "At risk";
+      else status = "Active";
+    }
+    return {
+      ...entry,
+      coveragePercent,
+      avgSentiment,
+      avgLagDays,
+      status
+    };
+  });
+
+  loopRows.innerHTML = "";
+  rows
+    .sort((a, b) => b.coveragePercent - a.coveragePercent)
+    .forEach((item) => {
+      const row = document.createElement("div");
+      row.className = "loop-row";
+      const statusClass =
+        item.status === "Active"
+          ? "status-active"
+          : item.status === "At risk"
+            ? "status-fading"
+            : item.status === "Silent"
+              ? "status-silent"
+              : "status-empty";
+      row.innerHTML = `
+        <span>${item.source}</span>
+        <span>${item.coveragePercent}%</span>
+        <span>${item.avgLagDays}${item.avgLagDays === "—" ? "" : "d"}</span>
+        <span>${item.avgSentiment}</span>
+        <span class="status-badge ${statusClass}">${item.status}</span>
+      `;
+      loopRows.appendChild(row);
+    });
+
+  const coverageGaps = rows
+    .filter((item) => item.total > 0)
+    .sort((a, b) => a.coveragePercent - b.coveragePercent);
+  const biggestGap = coverageGaps[0];
+  const fastest = rows
+    .filter((item) => item.avgLagDays !== "—")
+    .sort((a, b) => Number(a.avgLagDays) - Number(b.avgLagDays))[0];
+
+  loopInsights.innerHTML = "";
+  const insightItems = [
+    {
+      title: "Largest coverage gap",
+      body: biggestGap
+        ? `${biggestGap.source} · ${biggestGap.coveragePercent}% of signals linked`
+        : "No coverage gaps yet."
+    },
+    {
+      title: "Fastest follow-up",
+      body: fastest
+        ? `${fastest.source} · ${fastest.avgLagDays}d avg lag`
+        : "No follow-ups logged yet."
+    }
+  ];
+
+  insightItems.forEach((item) => {
+    const card = document.createElement("div");
+    card.className = "loop-card";
+    card.innerHTML = `
+      <strong>${item.title}</strong>
+      <p>${item.body}</p>
+    `;
+    loopInsights.appendChild(card);
+  });
+}
+
+function getLocationStats(signals) {
+  const recent = getSignalsInRange(signals, -1, 7);
+  const prior = getSignalsInRange(signals, 7, 14);
+  const locations = Array.from(
+    new Set(
+      signals.map((signal) =>
+        signal.location ? signal.location.trim() : "Unspecified"
+      )
+    )
+  );
+  return locations.map((location) => {
+    const items = signals.filter((signal) => {
+      const loc = signal.location ? signal.location.trim() : "Unspecified";
+      return loc === location;
+    });
+    const total = items.length;
+    const lastDate = total
+      ? items.reduce(
+          (latest, signal) =>
+            parseDate(signal.createdAt) > parseDate(latest)
+              ? signal.createdAt
+              : latest,
+          items[0].createdAt
+        )
+      : null;
+    const lastDays = lastDate ? getDaysAgo(lastDate) : null;
+    const last14 = items.filter((signal) => isWithinDays(signal.createdAt, 14))
+      .length;
+    const urgent14 = items.filter(
+      (signal) =>
+        signal.urgency === "high" && isWithinDays(signal.createdAt, 14)
+    ).length;
+    const avgSentiment = total
+      ? (
+          items.reduce((sum, signal) => sum + signal.sentiment, 0) / total
+        ).toFixed(1)
+      : "—";
+    const recentCount = recent.filter((signal) => {
+      const loc = signal.location ? signal.location.trim() : "Unspecified";
+      return loc === location;
+    }).length;
+    const priorCount = prior.filter((signal) => {
+      const loc = signal.location ? signal.location.trim() : "Unspecified";
+      return loc === location;
+    }).length;
+    const growthDelta = priorCount
+      ? Math.round(((recentCount - priorCount) / priorCount) * 100)
+      : recentCount
+        ? null
+        : 0;
+    let status = "No data";
+    if (total) {
+      if (lastDays <= 7) status = "Active";
+      else if (lastDays <= 14) status = "Fading";
+      else status = "Silent";
+    }
+    return {
+      location,
+      total,
+      lastDate,
+      lastDays,
+      last14,
+      urgent14,
+      avgSentiment,
+      growthDelta,
+      status
+    };
+  });
+}
+
+function renderLocationPulse(signals) {
+  if (!locationSummary || !locationRows || !locationInsights) return;
+
+  const stats = getLocationStats(signals);
+  if (!stats.length) {
+    locationSummary.innerHTML = "<p>No location data yet.</p>";
+    locationRows.innerHTML = "";
+    locationInsights.innerHTML = "<p class=\"hint\">Log locations on signals to see regional patterns.</p>";
+    return;
+  }
+
+  const activeCount = stats.filter((item) => item.last14 > 0).length;
+  const coolingCount = stats.filter((item) => item.status === "Fading").length;
+  const silentCount = stats.filter((item) => item.status === "Silent").length;
+  const hotspot = stats
+    .filter((item) => item.urgent14 > 0)
+    .sort((a, b) => b.urgent14 - a.urgent14)[0];
+
+  locationSummary.innerHTML = `
+    <div class="summary-card">
+      <span class="label">Active locations</span>
+      <strong>${activeCount}/${stats.length}</strong>
+    </div>
+    <div class="summary-card">
+      <span class="label">Cooling regions</span>
+      <strong>${coolingCount}</strong>
+    </div>
+    <div class="summary-card">
+      <span class="label">Silent regions</span>
+      <strong>${silentCount}</strong>
+    </div>
+    <div class="summary-card">
+      <span class="label">Urgency hotspot</span>
+      <strong>${hotspot ? hotspot.location : "—"}</strong>
+    </div>
+  `;
+
+  locationRows.innerHTML = "";
+  stats
+    .slice()
+    .sort((a, b) => b.last14 - a.last14 || b.total - a.total)
+    .forEach((item) => {
+      const row = document.createElement("div");
+      row.className = "location-row";
+      const urgencyText = item.last14
+        ? `${Math.round((item.urgent14 / item.last14) * 100)}% high`
+        : "—";
+      const statusClass =
+        item.status === "Active"
+          ? "status-active"
+          : item.status === "Fading"
+            ? "status-fading"
+            : item.status === "Silent"
+              ? "status-silent"
+              : "status-empty";
+      row.innerHTML = `
+        <span>${item.location}</span>
+        <span>${item.lastDate ? `${item.lastDate} (${item.lastDays}d)` : "—"}</span>
+        <span>${item.last14}</span>
+        <span>${item.avgSentiment}</span>
+        <span>${urgencyText}</span>
+        <span class="status-badge ${statusClass}">${item.status}</span>
+      `;
+      locationRows.appendChild(row);
+    });
+
+  const topGrowth = stats
+    .filter((item) => item.growthDelta !== null)
+    .sort((a, b) => b.growthDelta - a.growthDelta)[0];
+  const cooling = stats
+    .filter((item) => item.growthDelta !== null)
+    .sort((a, b) => a.growthDelta - b.growthDelta)[0];
+  const sentimentRisk = stats
+    .filter((item) => item.avgSentiment !== "—" && Number(item.avgSentiment) <= 2.5)
+    .sort((a, b) => Number(a.avgSentiment) - Number(b.avgSentiment))[0];
+  const largest = stats.slice().sort((a, b) => b.total - a.total)[0];
+
+  locationInsights.innerHTML = "";
+  [
+    {
+      title: "Fastest growth",
+      body: topGrowth
+        ? `${topGrowth.location} · ${topGrowth.growthDelta > 0 ? "+" : ""}${topGrowth.growthDelta}% vs prior week`
+        : "No growth trend yet."
+    },
+    {
+      title: "Cooling signals",
+      body: cooling
+        ? `${cooling.location} · ${cooling.growthDelta}% vs prior week`
+        : "No cooling trend yet."
+    },
+    {
+      title: "Sentiment watch",
+      body: sentimentRisk
+        ? `${sentimentRisk.location} · avg sentiment ${sentimentRisk.avgSentiment}`
+        : "No low-sentiment locations."
+    },
+    {
+      title: "Highest volume",
+      body: largest ? `${largest.location} · ${largest.total} total signals` : "No volume leader yet."
+    }
+  ].forEach((card) => {
+    const item = document.createElement("div");
+    item.className = "location-card";
+    item.innerHTML = `<strong>${card.title}</strong><p>${card.body}</p>`;
+    locationInsights.appendChild(item);
+  });
+}
+
 function renderAlertDesk(stats) {
   const alerts = [];
   stats.forEach((item) => {
@@ -755,6 +1273,78 @@ function renderAlertDesk(stats) {
       item.textContent = alert.text;
       alertList.appendChild(item);
     });
+}
+
+function renderEscalationRadar(signals, commitments) {
+  if (!escalationTotal || !escalationList) return;
+
+  const windowSignals = getRecentSignals(signals, 14).filter(
+    (signal) => signal.urgency === "high" || signal.sentiment <= 2
+  );
+  const commitmentMap = new Map(
+    commitments
+      .filter((item) => item.signalId)
+      .map((item) => [item.signalId, item])
+  );
+  const today = startOfToday();
+
+  const unassigned = windowSignals.filter(
+    (signal) => !commitmentMap.has(signal.id)
+  );
+  const overdue = windowSignals.filter((signal) => {
+    const linked = commitmentMap.get(signal.id);
+    if (!linked || !linked.due || linked.status === "Complete") return false;
+    return parseDate(linked.due) < today;
+  });
+
+  escalationTotal.textContent = windowSignals.length;
+  escalationUnassigned.textContent = unassigned.length;
+  escalationOverdue.textContent = overdue.length;
+
+  escalationList.innerHTML = "";
+  if (!windowSignals.length) {
+    escalationList.innerHTML =
+      "<p class=\"hint\">No high-risk signals flagged in the last 14 days.</p>";
+    return;
+  }
+
+  const ranked = [...windowSignals].sort((a, b) => {
+    const urgencyScore = (signal) => (signal.urgency === "high" ? 2 : 1);
+    const sentimentScore = (signal) => (signal.sentiment <= 2 ? 2 : 1);
+    const scoreDiff =
+      urgencyScore(b) + sentimentScore(b) - (urgencyScore(a) + sentimentScore(a));
+    if (scoreDiff !== 0) return scoreDiff;
+    return parseDate(b.createdAt) - parseDate(a.createdAt);
+  });
+
+  ranked.slice(0, 6).forEach((signal) => {
+    const linked = commitmentMap.get(signal.id);
+    const pillClass = signal.urgency === "high" ? "high" : "low";
+    const ownerText = linked
+      ? `${linked.owner} · Due ${linked.due}`
+      : "Unassigned · Needs owner";
+
+    const card = document.createElement("div");
+    card.className = "escalation-card";
+    card.innerHTML = `
+      <div>
+        <h4>${signal.title}</h4>
+        <p>${signal.notes}</p>
+      </div>
+      <div class="escalation-meta">
+        <span>${signal.source}</span>
+        <span>${signal.createdAt}</span>
+        <span>Sentiment ${signal.sentiment}</span>
+      </div>
+      <div class="escalation-footer">
+        <span class="escalation-pill ${pillClass}">
+          ${signal.urgency.toUpperCase()}${signal.sentiment <= 2 ? " · LOW SENTIMENT" : ""}
+        </span>
+        <span class="escalation-owner ${linked ? "" : "unassigned"}">${ownerText}</span>
+      </div>
+    `;
+    escalationList.appendChild(card);
+  });
 }
 
 function getRecentSignals(signals, days) {
@@ -1190,6 +1780,9 @@ function renderAll() {
   updateMomentum(signals);
   renderTagTrends(signals);
   renderListeningHealth(signals);
+  renderLoopHealth(signals, getCommitments());
+  renderLocationPulse(signals);
+  renderEscalationRadar(signals, getCommitments());
   renderTriage(signals);
   renderPlaybook(signals);
   renderResponseSla(signals, getCommitments());
@@ -1534,6 +2127,14 @@ signalForm.addEventListener("submit", handleSignalSubmit);
 trackerForm.addEventListener("submit", handleCommitmentSubmit);
 seedBtn.addEventListener("click", handleSeed);
 digestBtn.addEventListener("click", () => renderDigest(getSignals()));
+if (briefBtn) {
+  briefBtn.addEventListener("click", () =>
+    renderBrief(getSignals(), getCommitments())
+  );
+}
+if (briefCopyBtn) {
+  briefCopyBtn.addEventListener("click", handleCopyBrief);
+}
 exportBtn.addEventListener("click", handleExport);
 importInput.addEventListener("change", handleImport);
 resetFiltersBtn.addEventListener("click", handleResetFilters);
