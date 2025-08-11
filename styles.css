@@ -309,48 +309,6 @@ h1 {
   gap: 6px;
 }
 
-.sla-metrics {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
-.sla-list {
-  display: grid;
-  gap: 10px;
-}
-
-.sla-row {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 12px;
-  align-items: center;
-  padding: 12px 14px;
-  border-radius: 16px;
-  background: rgba(18, 22, 39, 0.04);
-}
-
-.sla-row p {
-  margin: 4px 0 0;
-  color: var(--muted);
-  font-size: 0.85rem;
-}
-
-.sla-pill {
-  padding: 6px 12px;
-  border-radius: 999px;
-  background: rgba(35, 125, 255, 0.12);
-  color: #1a4ed8;
-  font-size: 0.8rem;
-  font-weight: 600;
-}
-
-.sla-pill.risk {
-  background: rgba(239, 71, 111, 0.12);
-  color: #bf2f4a;
-}
-
 .commitment-metrics {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));

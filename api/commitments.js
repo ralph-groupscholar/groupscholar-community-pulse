@@ -10,13 +10,14 @@ function normalizeCommitment(commitment) {
     owner: String(commitment.owner || "").trim(),
     due: String(commitment.due || "").slice(0, 10),
     status: String(commitment.status || "").trim(),
+    signalId: String(commitment.signalId || "").trim(),
     createdAt: String(commitment.createdAt || "").slice(0, 10)
   };
 }
 
 async function listCommitments() {
   const { rows } = await query(
-    `SELECT id, commitment, owner, due, status, created_at
+    `SELECT id, commitment, owner, due, status, signal_id, created_at
      FROM ${SCHEMA}.commitments
      ORDER BY created_at DESC, inserted_at DESC`
   );
@@ -26,6 +27,7 @@ async function listCommitments() {
     owner: row.owner,
     due: row.due,
     status: row.status,
+    signalId: row.signal_id || "",
     createdAt: row.created_at
   }));
 }
@@ -49,8 +51,8 @@ module.exports = async (req, res) => {
       }
       await query(
         `INSERT INTO ${SCHEMA}.commitments
-          (id, commitment, owner, due, status, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6)
+          (id, commitment, owner, due, status, signal_id, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
          ON CONFLICT (id) DO NOTHING`,
         [
           commitment.id,
@@ -58,6 +60,7 @@ module.exports = async (req, res) => {
           commitment.owner,
           commitment.due,
           commitment.status,
+          commitment.signalId || null,
           commitment.createdAt
         ]
       );

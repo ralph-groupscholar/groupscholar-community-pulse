@@ -57,6 +57,7 @@ const sampleCommitments = [
     owner: "Finance Ops",
     due: "2026-02-12",
     status: "In progress",
+    signalId: "signal-1",
     createdAt: "2026-02-05"
   },
   {
@@ -65,6 +66,7 @@ const sampleCommitments = [
     owner: "Mentor Team",
     due: "2026-02-18",
     status: "Planning",
+    signalId: "signal-3",
     createdAt: "2026-02-02"
   }
 ];
@@ -98,8 +100,8 @@ module.exports = async (req, res) => {
     for (const commitment of sampleCommitments) {
       await query(
         `INSERT INTO ${SCHEMA}.commitments
-          (id, commitment, owner, due, status, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6)
+          (id, commitment, owner, due, status, signal_id, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
          ON CONFLICT (id) DO NOTHING`,
         [
           commitment.id,
@@ -107,6 +109,7 @@ module.exports = async (req, res) => {
           commitment.owner,
           commitment.due,
           commitment.status,
+          commitment.signalId || null,
           commitment.createdAt
         ]
       );

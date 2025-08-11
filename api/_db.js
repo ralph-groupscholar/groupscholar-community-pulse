@@ -11,7 +11,8 @@ function getPool() {
   }
   pool = new Pool({
     connectionString,
-    ssl: { rejectUnauthorized: false }
+    ssl:
+      process.env.PGSSL === "true" ? { rejectUnauthorized: false } : false
   });
   return pool;
 }

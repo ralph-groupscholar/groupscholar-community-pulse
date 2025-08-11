@@ -8,11 +8,12 @@ if (!connectionString) {
 
 const pool = new Pool({
   connectionString,
-  ssl: false
+  ssl: process.env.PGSSL === "true" ? { rejectUnauthorized: false } : false
 });
 
 const schema = "groupscholar_community_pulse";
-const table = "signals";
+const signalsTable = "signals";
+const commitmentsTable = "commitments";
 
 const sampleSignals = [
   {
@@ -61,13 +62,34 @@ const sampleSignals = [
   }
 ];
 
+const sampleCommitments = [
+  {
+    id: "commitment-1",
+    commitment: "Confirm stipend SLA with finance partners",
+    owner: "Finance Ops",
+    due: "2026-02-12",
+    status: "In progress",
+    signalId: "signal-1",
+    createdAt: "2026-02-05"
+  },
+  {
+    id: "commitment-2",
+    commitment: "Publish mentor time expectations",
+    owner: "Mentor Team",
+    due: "2026-02-18",
+    status: "Planning",
+    signalId: "signal-3",
+    createdAt: "2026-02-02"
+  }
+];
+
 async function main() {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
     await client.query(`CREATE SCHEMA IF NOT EXISTS ${schema}`);
     await client.query(`
-      CREATE TABLE IF NOT EXISTS ${schema}.${table} (
+      CREATE TABLE IF NOT EXISTS ${schema}.${signalsTable} (
         id TEXT PRIMARY KEY,
         title TEXT NOT NULL,
         source TEXT NOT NULL,
@@ -77,12 +99,38 @@ async function main() {
         location TEXT NOT NULL,
         tags TEXT[] NOT NULL DEFAULT '{}',
         created_at DATE NOT NULL,
+        inserted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )
     `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS ${schema}.${commitmentsTable} (
+        id TEXT PRIMARY KEY,
+        commitment TEXT NOT NULL,
+        owner TEXT NOT NULL,
+        due DATE NOT NULL,
+        status TEXT NOT NULL,
+        signal_id TEXT,
+        created_at DATE NOT NULL,
+        inserted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await client.query(`
+      ALTER TABLE ${schema}.${signalsTable}
+      ADD COLUMN IF NOT EXISTS inserted_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    `);
+    await client.query(`
+      ALTER TABLE ${schema}.${commitmentsTable}
+      ADD COLUMN IF NOT EXISTS signal_id TEXT
+    `);
+    await client.query(`
+      ALTER TABLE ${schema}.${commitmentsTable}
+      ADD COLUMN IF NOT EXISTS inserted_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    `);
 
     const insertQuery = `
-      INSERT INTO ${schema}.${table}
+      INSERT INTO ${schema}.${signalsTable}
         (id, title, source, notes, sentiment, urgency, location, tags, created_at, updated_at)
       VALUES
         ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
@@ -109,6 +157,33 @@ async function main() {
         signal.location,
         signal.tags,
         signal.createdAt
+      ]);
+    }
+
+    const insertCommitmentQuery = `
+      INSERT INTO ${schema}.${commitmentsTable}
+        (id, commitment, owner, due, status, signal_id, created_at, updated_at)
+      VALUES
+        ($1, $2, $3, $4, $5, $6, $7, NOW())
+      ON CONFLICT (id) DO UPDATE SET
+        commitment = EXCLUDED.commitment,
+        owner = EXCLUDED.owner,
+        due = EXCLUDED.due,
+        status = EXCLUDED.status,
+        signal_id = EXCLUDED.signal_id,
+        created_at = EXCLUDED.created_at,
+        updated_at = NOW()
+    `;
+
+    for (const commitment of sampleCommitments) {
+      await client.query(insertCommitmentQuery, [
+        commitment.id,
+        commitment.commitment,
+        commitment.owner,
+        commitment.due,
+        commitment.status,
+        commitment.signalId,
+        commitment.createdAt
       ]);
     }
 

@@ -81,6 +81,25 @@
       <div class="mini-bars" id="source-mix"></div>
     </section>
 
+    <section class="panel mix">
+      <div class="panel-head">
+        <h2>Signal mix</h2>
+        <p class="hint">Distribution of sentiment and urgency across all signals.</p>
+      </div>
+      <div class="health-summary" id="mix-summary"></div>
+      <div class="mix-grid">
+        <div>
+          <p class="label">Sentiment spread</p>
+          <div class="mix-bars" id="sentiment-bars"></div>
+        </div>
+        <div>
+          <p class="label">Urgency mix</p>
+          <div class="mix-bars" id="urgency-bars"></div>
+        </div>
+      </div>
+      <div class="mix-insights" id="mix-insights"></div>
+    </section>
+
     <section class="panel tag-trends">
       <div class="panel-head">
         <h2>Topic shifts</h2>
@@ -198,6 +217,28 @@
         </div>
       </div>
       <div class="escalation-list" id="escalation-list"></div>
+    </section>
+
+    <section class="panel risk">
+      <div class="panel-head">
+        <h2>Risk watchlist</h2>
+        <p class="hint">High-urgency signals with low sentiment and growing impact.</p>
+      </div>
+      <div class="risk-summary">
+        <div class="summary-card">
+          <span class="label">High-risk signals</span>
+          <strong id="risk-total">0</strong>
+        </div>
+        <div class="summary-card">
+          <span class="label">Avg risk score</span>
+          <strong id="risk-average">0</strong>
+        </div>
+        <div class="summary-card">
+          <span class="label">Top risk tag</span>
+          <strong id="risk-tag">-</strong>
+        </div>
+      </div>
+      <div class="risk-list" id="risk-list"></div>
     </section>
 
     <section class="panel entry">
@@ -361,32 +402,6 @@
       <div id="playbook-output" class="playbook-body">
         <p>No playbook generated yet.</p>
       </div>
-    </section>
-
-    <section class="panel sla">
-      <div class="panel-head">
-        <h2>Response SLA</h2>
-        <p class="hint">Time-to-commitment coverage for incoming signals.</p>
-      </div>
-      <div class="sla-metrics">
-        <div>
-          <p class="label">Coverage</p>
-          <h3 id="response-coverage">0%</h3>
-        </div>
-        <div>
-          <p class="label">Avg response</p>
-          <h3 id="response-lag">—</h3>
-        </div>
-        <div>
-          <p class="label">SLA risk</p>
-          <h3 id="response-risk">0</h3>
-        </div>
-        <div>
-          <p class="label">Urgent open</p>
-          <h3 id="response-urgent">0</h3>
-        </div>
-      </div>
-      <div class="sla-list" id="response-list"></div>
     </section>
 
     <section class="panel commitment-pulse">

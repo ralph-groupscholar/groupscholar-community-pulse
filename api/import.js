@@ -40,8 +40,8 @@ module.exports = async (req, res) => {
       if (!commitment || !commitment.id) continue;
       await query(
         `INSERT INTO ${SCHEMA}.commitments
-          (id, commitment, owner, due, status, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6)
+          (id, commitment, owner, due, status, signal_id, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
          ON CONFLICT (id) DO NOTHING`,
         [
           commitment.id,
@@ -49,6 +49,7 @@ module.exports = async (req, res) => {
           commitment.owner || "",
           String(commitment.due || "").slice(0, 10),
           commitment.status || "",
+          String(commitment.signalId || "").trim() || null,
           String(commitment.createdAt || "").slice(0, 10)
         ]
       );
