@@ -37,6 +37,10 @@ const momentumVolume = document.getElementById("momentum-volume");
 const momentumSentiment = document.getElementById("momentum-sentiment");
 const momentumUrgency = document.getElementById("momentum-urgency");
 const sourceMix = document.getElementById("source-mix");
+const mixSummary = document.getElementById("mix-summary");
+const sentimentBars = document.getElementById("sentiment-bars");
+const urgencyBars = document.getElementById("urgency-bars");
+const mixInsights = document.getElementById("mix-insights");
 const healthSummary = document.getElementById("health-summary");
 const healthRows = document.getElementById("health-rows");
 const alertList = document.getElementById("alert-list");
@@ -55,6 +59,10 @@ const escalationTotal = document.getElementById("escalation-total");
 const escalationUnassigned = document.getElementById("escalation-unassigned");
 const escalationOverdue = document.getElementById("escalation-overdue");
 const escalationList = document.getElementById("escalation-list");
+const riskTotal = document.getElementById("risk-total");
+const riskAverage = document.getElementById("risk-average");
+const riskTag = document.getElementById("risk-tag");
+const riskList = document.getElementById("risk-list");
 const triageGrid = document.getElementById("triage-grid");
 const playbookOutput = document.getElementById("playbook-output");
 const tagGrid = document.getElementById("tag-grid");
@@ -83,6 +91,10 @@ const responseLag = document.getElementById("response-lag");
 const responseRisk = document.getElementById("response-risk");
 const responseUrgent = document.getElementById("response-urgent");
 const responseList = document.getElementById("response-list");
+const ownerTotal = document.getElementById("owner-total");
+const ownerOverloaded = document.getElementById("owner-overloaded");
+const ownerTop = document.getElementById("owner-top");
+const ownerList = document.getElementById("owner-list");
 
 const dataModeStatus = document.getElementById("data-mode-status");
 const dataModeDetail = document.getElementById("data-mode-detail");
@@ -204,6 +216,7 @@ function setCommitments(commitments, persist = true) {
   renderCommitments(commitments);
   renderCommitmentPulse(commitments);
   renderResponseSla(getSignals(), commitments);
+  renderOwnerPulse(getSignals(), commitments);
   renderEscalationRadar(getSignals(), commitments);
   renderLoopHealth(getSignals(), commitments);
 }
@@ -449,6 +462,120 @@ function renderResponseSla(signals, commitments) {
   });
 }
 
+function renderOwnerPulse(signals, commitments) {
+  if (!ownerTotal || !ownerList || !ownerOverloaded || !ownerTop) return;
+
+  if (!commitments.length) {
+    ownerTotal.textContent = "0";
+    ownerOverloaded.textContent = "0";
+    ownerTop.textContent = "—";
+    ownerList.innerHTML = "<p>No commitments to evaluate yet.</p>";
+    return;
+  }
+
+  const signalMap = new Map(signals.map((signal) => [signal.id, signal]));
+  const today = startOfToday();
+  const ownerMap = new Map();
+
+  commitments.forEach((item) => {
+    const owner = item.owner && item.owner.trim() ? item.owner.trim() : "Unassigned";
+    if (!ownerMap.has(owner)) {
+      ownerMap.set(owner, []);
+    }
+    ownerMap.get(owner).push(item);
+  });
+
+  const ownerStats = Array.from(ownerMap.entries()).map(([owner, items]) => {
+    const openItems = items.filter((item) => item.status !== "Complete");
+    const overdueItems = openItems.filter((item) => parseDate(item.due) < today);
+    const blockedItems = openItems.filter((item) => item.status === "Blocked");
+    const dueSoonItems = openItems.filter((item) => {
+      const due = parseDate(item.due);
+      const diff = getDayDiff(today, due);
+      return diff >= 0 && diff <= 7;
+    });
+
+    const linked = items
+      .map((item) => ({
+        commitment: item,
+        signal: item.signalId ? signalMap.get(item.signalId) : null
+      }))
+      .filter((entry) => entry.signal);
+
+    const urgentLinked = linked.filter((entry) => entry.signal.urgency === "high");
+    const responseLags = linked
+      .map((entry) => {
+        if (!entry.commitment.createdAt) return null;
+        return Math.max(
+          0,
+          getDayDiff(
+            parseDate(entry.signal.createdAt),
+            parseDate(entry.commitment.createdAt)
+          )
+        );
+      })
+      .filter((value) => value !== null);
+
+    const avgLag = responseLags.length
+      ? Math.round(
+          responseLags.reduce((sum, value) => sum + value, 0) /
+            responseLags.length
+        )
+      : null;
+
+    const lagPenalty = avgLag !== null ? Math.max(0, avgLag - 3) * 0.5 : 0;
+    const score =
+      openItems.length +
+      overdueItems.length * 2 +
+      blockedItems.length * 1.5 +
+      urgentLinked.length +
+      lagPenalty;
+
+    return {
+      owner,
+      open: openItems.length,
+      overdue: overdueItems.length,
+      blocked: blockedItems.length,
+      dueSoon: dueSoonItems.length,
+      linked: linked.length,
+      urgentLinked: urgentLinked.length,
+      avgLag,
+      score: Number(score.toFixed(1))
+    };
+  });
+
+  ownerStats.sort((a, b) => b.score - a.score || b.overdue - a.overdue);
+
+  const overloaded = ownerStats.filter((entry) => entry.score >= 6);
+  const topOwner = ownerStats[0];
+
+  ownerTotal.textContent = `${ownerStats.length}`;
+  ownerOverloaded.textContent = `${overloaded.length}`;
+  ownerTop.textContent = topOwner
+    ? `${topOwner.owner} (${topOwner.score})`
+    : "—";
+
+  ownerList.innerHTML = ownerStats.length
+    ? ownerStats
+        .slice(0, 6)
+        .map((entry) => {
+          const lagText = entry.avgLag !== null ? `${entry.avgLag}d` : "—";
+          const pillClass = entry.score >= 6 ? "owner-pill risk" : "owner-pill";
+          return `
+            <div class="owner-row">
+              <div>
+                <strong>${entry.owner}</strong>
+                <p>Open ${entry.open} · Overdue ${entry.overdue} · Blocked ${entry.blocked} · Due soon ${entry.dueSoon}</p>
+                <p>Linked signals ${entry.linked} · Avg response ${lagText} · Urgent links ${entry.urgentLinked}</p>
+              </div>
+              <span class="${pillClass}">Load ${entry.score}</span>
+            </div>
+          `;
+        })
+        .join("")
+    : "<p>No owner insights yet.</p>";
+}
+
 function buildBriefText(lines) {
   return lines.filter(Boolean).join("\n");
 }
@@ -613,6 +740,13 @@ function getTopTag(signals) {
   return top ? `${top} (${topCount})` : "—";
 }
 
+function getRiskScore(signal) {
+  const sentimentWeight = Math.max(1, 6 - Number(signal.sentiment || 3));
+  const urgencyWeight =
+    signal.urgency === "high" ? 3 : signal.urgency === "medium" ? 2 : 1;
+  return sentimentWeight * urgencyWeight;
+}
+
 function applyFilters(signals) {
   const query = searchInput.value.trim().toLowerCase();
   const source = filterSource.value;
@@ -745,6 +879,119 @@ function updateMomentum(signals) {
       `;
       sourceMix.appendChild(bar);
     });
+}
+
+function renderSignalMix(signals) {
+  if (!mixSummary || !sentimentBars || !urgencyBars || !mixInsights) return;
+
+  if (!signals.length) {
+    mixSummary.innerHTML = "<p>No signals yet.</p>";
+    sentimentBars.innerHTML = "<p class=\"hint\">Add signals to see sentiment mix.</p>";
+    urgencyBars.innerHTML = "<p class=\"hint\">Add signals to see urgency mix.</p>";
+    mixInsights.innerHTML = "";
+    return;
+  }
+
+  const total = signals.length;
+  const sentimentCounts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+  const urgencyCounts = { high: 0, medium: 0, low: 0 };
+
+  signals.forEach((signal) => {
+    sentimentCounts[signal.sentiment] += 1;
+    urgencyCounts[signal.urgency] += 1;
+  });
+
+  const positive = sentimentCounts[4] + sentimentCounts[5];
+  const critical = sentimentCounts[1] + sentimentCounts[2];
+  const neutral = sentimentCounts[3];
+  const urgent = urgencyCounts.high;
+
+  const toPercent = (count) => Math.round((count / total) * 100);
+
+  mixSummary.innerHTML = `
+    <div class="summary-card">
+      <span class="label">Positive signals</span>
+      <strong>${toPercent(positive)}%</strong>
+    </div>
+    <div class="summary-card">
+      <span class="label">Critical signals</span>
+      <strong>${toPercent(critical)}%</strong>
+    </div>
+    <div class="summary-card">
+      <span class="label">Neutral watch</span>
+      <strong>${toPercent(neutral)}%</strong>
+    </div>
+    <div class="summary-card">
+      <span class="label">High urgency</span>
+      <strong>${toPercent(urgent)}%</strong>
+    </div>
+  `;
+
+  sentimentBars.innerHTML = "";
+  [5, 4, 3, 2, 1].forEach((score) => {
+    const count = sentimentCounts[score];
+    const bar = document.createElement("div");
+    bar.className = "mix-bar";
+    bar.innerHTML = `
+      <span>${score} · ${sentimentLabels[score]}</span>
+      <div class="mix-track"><span style="--fill: ${toPercent(count)}%"></span></div>
+      <strong>${count}</strong>
+    `;
+    sentimentBars.appendChild(bar);
+  });
+
+  urgencyBars.innerHTML = "";
+  [
+    { key: "high", label: "High urgency" },
+    { key: "medium", label: "Medium urgency" },
+    { key: "low", label: "Low urgency" }
+  ].forEach((item) => {
+    const count = urgencyCounts[item.key];
+    const bar = document.createElement("div");
+    bar.className = "mix-bar";
+    bar.innerHTML = `
+      <span>${item.label}</span>
+      <div class="mix-track"><span style="--fill: ${toPercent(count)}%"></span></div>
+      <strong>${count}</strong>
+    `;
+    urgencyBars.appendChild(bar);
+  });
+
+  const dominantSentiment = Object.entries(sentimentCounts)
+    .sort((a, b) => b[1] - a[1])[0];
+  const netDelta = positive - critical;
+  const netSummary =
+    netDelta === 0
+      ? "Even balance between positive and critical signals."
+      : netDelta > 0
+        ? `Net positive by ${netDelta} signals.`
+        : `Net critical by ${Math.abs(netDelta)} signals.`;
+
+  mixInsights.innerHTML = "";
+  [
+    {
+      title: "Dominant sentiment",
+      body: dominantSentiment
+        ? `${sentimentLabels[dominantSentiment[0]]} · ${dominantSentiment[1]} signals`
+        : "No sentiment data yet."
+    },
+    {
+      title: "Urgency pressure",
+      body: `${urgent} high-urgency signals · ${toPercent(urgent)}% of total.`
+    },
+    {
+      title: "Balance check",
+      body: netSummary
+    }
+  ].forEach((item) => {
+    const card = document.createElement("div");
+    card.className = "mix-card";
+    card.innerHTML = `
+      <strong>${item.title}</strong>
+      <p>${item.body}</p>
+    `;
+    mixInsights.appendChild(card);
+  });
 }
 
 function getSourceStats(signals) {
@@ -1275,6 +1522,96 @@ function renderAlertDesk(stats) {
     });
 }
 
+function renderSignalAging(signals, commitments) {
+  if (!agingAverage || !agingOldest || !agingUnassigned || !agingBars || !agingList) return;
+
+  if (!signals.length) {
+    agingAverage.textContent = "0d";
+    agingOldest.textContent = "0d";
+    agingUnassigned.textContent = "0";
+    agingBars.innerHTML = "<p class=\"hint\">No signals yet.</p>";
+    agingList.innerHTML =
+      "<p class=\"hint\">Capture signals to see aging and ownership risk.</p>";
+    return;
+  }
+
+  const commitmentMap = new Map(
+    commitments
+      .filter((item) => item.signalId)
+      .map((item) => [item.signalId, item])
+  );
+
+  const ages = signals.map((signal) => {
+    const days = Math.max(0, getDaysAgo(signal.createdAt));
+    return {
+      signal,
+      days,
+      assigned: commitmentMap.has(signal.id)
+    };
+  });
+
+  const total = ages.length;
+  const avg = ages.reduce((sum, item) => sum + item.days, 0) / total;
+  const oldest = ages.reduce((max, item) => Math.max(max, item.days), 0);
+  const unassignedStale = ages.filter(
+    (item) => !item.assigned && item.days >= 7
+  ).length;
+
+  agingAverage.textContent = `${avg.toFixed(1)}d`;
+  agingOldest.textContent = `${oldest}d`;
+  agingUnassigned.textContent = `${unassignedStale}`;
+
+  const buckets = [
+    { label: "0-2d", min: 0, max: 2 },
+    { label: "3-6d", min: 3, max: 6 },
+    { label: "7-13d", min: 7, max: 13 },
+    { label: "14+d", min: 14, max: Infinity }
+  ];
+
+  agingBars.innerHTML = "";
+  buckets.forEach((bucket) => {
+    const count = ages.filter(
+      (item) => item.days >= bucket.min && item.days <= bucket.max
+    ).length;
+    const percent = total ? Math.round((count / total) * 100) : 0;
+    const row = document.createElement("div");
+    row.className = "aging-bar";
+    row.innerHTML = `
+      <span>${bucket.label}</span>
+      <div class="aging-track">
+        <div class="aging-fill" style="width: ${percent}%"></div>
+      </div>
+      <strong>${count}</strong>
+    `;
+    agingBars.appendChild(row);
+  });
+
+  const ranked = ages
+    .slice()
+    .sort((a, b) => b.days - a.days || a.signal.title.localeCompare(b.signal.title))
+    .slice(0, 6);
+
+  agingList.innerHTML = "";
+  ranked.forEach((item) => {
+    const row = document.createElement("div");
+    row.className = "aging-row";
+    const statusText = item.assigned ? "Owned" : "Unassigned";
+    const statusClass = item.assigned ? "ok" : "risk";
+    const location = item.signal.location ? item.signal.location : "Location unknown";
+    row.innerHTML = `
+      <div>
+        <strong>${item.signal.title}</strong>
+        <p>${item.signal.source} · ${location} · ${item.signal.createdAt}</p>
+      </div>
+      <div class="aging-meta">
+        <span class="aging-pill ${statusClass}">${statusText}</span>
+        <span class="aging-pill">${item.days}d old</span>
+      </div>
+    `;
+    agingList.appendChild(row);
+  });
+}
+
 function renderEscalationRadar(signals, commitments) {
   if (!escalationTotal || !escalationList) return;
 
@@ -1345,6 +1682,75 @@ function renderEscalationRadar(signals, commitments) {
     `;
     escalationList.appendChild(card);
   });
+}
+
+function renderRiskWatchlist(signals) {
+  if (!riskTotal || !riskAverage || !riskTag || !riskList) return;
+
+  if (!signals.length) {
+    riskTotal.textContent = "0";
+    riskAverage.textContent = "0.0";
+    riskTag.textContent = "—";
+    riskList.innerHTML = "<p class=\"hint\">No signals yet.</p>";
+    return;
+  }
+
+  const scored = signals.map((signal) => ({
+    signal,
+    score: getRiskScore(signal)
+  }));
+  const highRisk = scored.filter((item) => item.score >= 8);
+
+  riskTotal.textContent = highRisk.length;
+  riskAverage.textContent = highRisk.length
+    ? (
+        highRisk.reduce((sum, item) => sum + item.score, 0) / highRisk.length
+      ).toFixed(1)
+    : "0.0";
+
+  const tagCounts = {};
+  highRisk.forEach((item) => {
+    item.signal.tags.forEach((tag) => {
+      tagCounts[tag] = (tagCounts[tag] || 0) + 1;
+    });
+  });
+  const topTag = Object.entries(tagCounts).sort((a, b) => b[1] - a[1])[0];
+  riskTag.textContent = topTag ? `${topTag[0]} (${topTag[1]})` : "—";
+
+  riskList.innerHTML = "";
+  if (!highRisk.length) {
+    riskList.innerHTML =
+      "<p class=\"hint\">No high-risk signals yet. Stay on the pulse.</p>";
+    return;
+  }
+
+  highRisk
+    .slice()
+    .sort((a, b) => b.score - a.score || parseDate(b.signal.createdAt) - parseDate(a.signal.createdAt))
+    .slice(0, 6)
+    .forEach(({ signal, score }) => {
+      const card = document.createElement("div");
+      const scoreClass = score >= 12 ? "high" : score >= 9 ? "medium" : "low";
+      const sentimentLabel = sentimentLabels[signal.sentiment] || "Neutral";
+      const location = signal.location ? signal.location : "Location unknown";
+      card.className = "risk-card";
+      card.innerHTML = `
+        <div>
+          <h4>${signal.title}</h4>
+          <p>${signal.notes}</p>
+        </div>
+        <div class="risk-meta">
+          <span>${signal.source}</span>
+          <span>${location}</span>
+          <span>${signal.createdAt}</span>
+        </div>
+        <div class="risk-footer">
+          <span class="risk-pill ${scoreClass}">Score ${score}</span>
+          <span class="risk-pill">${signal.urgency.toUpperCase()} · ${sentimentLabel}</span>
+        </div>
+      `;
+      riskList.appendChild(card);
+    });
 }
 
 function getRecentSignals(signals, days) {
@@ -1778,14 +2184,17 @@ function renderAll() {
   const filtered = applyFilters(signals);
   updateMetrics(signals);
   updateMomentum(signals);
+  renderSignalMix(signals);
   renderTagTrends(signals);
   renderListeningHealth(signals);
   renderLoopHealth(signals, getCommitments());
   renderLocationPulse(signals);
   renderEscalationRadar(signals, getCommitments());
+  renderRiskWatchlist(signals);
   renderTriage(signals);
   renderPlaybook(signals);
   renderResponseSla(signals, getCommitments());
+  renderOwnerPulse(signals, getCommitments());
   renderFeed(filtered);
 }
 

@@ -81,6 +81,21 @@
 - Implemented per-source loop stats with coverage %, average lag, sentiment, and status tags plus insight callouts.
 - Styled loop summary cards and insights to match the Community Pulse dashboard system.
 
+## Iteration 114
+- Added a Risk Watchlist panel highlighting high-urgency, low-sentiment signals with a risk score summary.
+- Implemented risk scoring, top-tag tracking, and ranked watchlist cards for rapid triage focus.
+- Styled the risk summary and watchlist cards to align with existing dashboard patterns.
+
 ## Iteration 163
 - Removed duplicate Response SLA panel markup to prevent conflicting IDs in the dashboard layout.
 - Consolidated SLA styling to a single definition for consistent presentation.
+
+## Iteration 154
+- Added a Signal Mix panel with sentiment and urgency distribution bars plus summary cards.
+- Implemented mix insights for dominant sentiment, urgency pressure, and net balance.
+- Styled the new mix panel to match the Community Pulse dashboard system.
+
+## Iteration 164
+- Added an Owner Pulse panel to spotlight commitment load, overdue risk, and response lag by owner.
+- Implemented owner load scoring with overdue, blocked, urgent-linked signals, and response lag penalties.
+- Styled owner summary cards and owner load rows to match the Community Pulse dashboard system.
